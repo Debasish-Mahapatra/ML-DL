@@ -54,9 +54,14 @@ class TerrainEncoder(nn.Module):
         
         # Learnable downsampling
         if learnable_downsample:
+            # FIX: Calculate actual input channels after gradient concatenation
+            downsample_input_channels = embedding_dim
+            if preserve_gradients:
+                downsample_input_channels += max(1, embedding_dim // 2)  # FIX: Add gradient feature channels
+            
             self.downsample = LearnableDownsample(
-                embedding_dim, 
-                embedding_dim, 
+                downsample_input_channels,  # FIX: Use actual input channels (96 when gradients enabled)
+                embedding_dim,              # FIX: Keep output channels as embedding_dim (64)
                 downsample_factor
             )
         else:
@@ -117,9 +122,11 @@ class TerrainEncoder(nn.Module):
         
         # Compute terrain gradients if enabled
         if self.preserve_gradients:
-            gradients = self._compute_terrain_gradients(features)
+            # FIX: Store original features before gradient computation to avoid channel mismatch
+            original_features = features
+            gradients = self._compute_terrain_gradients(original_features)  # FIX: Use original features with correct channel count
             gradient_features = self.gradient_conv(gradients)
-            features = torch.cat([features, gradient_features], dim=1)
+            features = torch.cat([original_features, gradient_features], dim=1)  # FIX: Concatenate with original features
         
         # Downsample to target resolution
         if self.learnable_downsample:

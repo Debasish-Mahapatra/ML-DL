@@ -14,55 +14,55 @@ Tensorboard is available. To monitor training, run:
 
 Log locations:
   Training logs: logs/
-  Experiment logs: experiments/lightning_cape_seasonal_20250709_133902/logs/
-  Checkpoints: experiments/lightning_cape_seasonal_20250709_133902/checkpoints/
+  Experiment logs: experiments/lightning_cape_seasonal_20250709_134815/logs/
+  Checkpoints: experiments/lightning_cape_seasonal_20250709_134815/checkpoints/
 [1;33m⚠ Skipping data preprocessing[0m
 [0;34m==== Training Lightning Prediction Model ====[0m
-Experiment name: lightning_cape_seasonal_20250709_133902
+Experiment name: lightning_cape_seasonal_20250709_134815
 Configuration: config
 
 [0;32m✓ GPU detected - training will use CUDA[0m
 NVIDIA GeForce RTX 3070 Laptop GPU, 8192
 
 Seed set to 42
-2025-07-09 13:39:05,345 - __main__ - INFO - Loaded configuration from config
-2025-07-09 13:39:05,362 - __main__ - INFO - Configuration validation completed
-2025-07-09 13:39:05,362 - __main__ - INFO - Created directories for experiment: lightning_cape_seasonal_20250709_133902
-2025-07-09 13:39:05,368 - __main__ - INFO - Saved experiment configuration to experiments/lightning_cape_seasonal_20250709_133902/config.yaml
-2025-07-09 13:39:05,368 - __main__ - INFO - Initializing data module...
-2025-07-09 13:39:05,368 - src.data.data_loader - INFO - Setting up data for stage: fit
-2025-07-09 13:39:05,370 - src.data.data_loader - INFO - Loaded 24 train, 4 val, 8 test file pairs
-2025-07-09 13:39:05,370 - src.data.data_loader - INFO - Setting up data preprocessor...
-2025-07-09 13:39:05,370 - src.data.preprocessing - INFO - Computing normalization statistics for cape
-2025-07-09 13:39:05,541 - src.data.preprocessing - INFO - cape normalization stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
-2025-07-09 13:39:05,543 - src.data.preprocessing - INFO - Computing normalization statistics for terrain
-2025-07-09 13:39:05,547 - src.data.preprocessing - INFO - terrain normalization stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
-2025-07-09 13:39:05,547 - src.data.data_loader - INFO - CAPE stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
-2025-07-09 13:39:05,547 - src.data.data_loader - INFO - Terrain stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
-2025-07-09 13:39:05,547 - src.data.dataset - INFO - Building dataset sample index...
-2025-07-09 13:39:05,702 - src.data.dataset - INFO - Built dataset index with 17592 samples
-2025-07-09 13:39:05,703 - src.data.dataset - INFO - Building dataset sample index...
-2025-07-09 13:39:05,728 - src.data.dataset - INFO - Built dataset index with 2928 samples
-2025-07-09 13:39:05,728 - __main__ - INFO - Data module initialized with 24 train files
-2025-07-09 13:39:05,752 - __main__ - INFO - Sample batch shapes:
-2025-07-09 13:39:05,752 - __main__ - INFO -   cape: torch.Size([1, 19, 26])
-2025-07-09 13:39:05,752 - __main__ - INFO -   terrain: torch.Size([1, 710, 710])
-2025-07-09 13:39:05,752 - __main__ - INFO -   lightning: torch.Size([181, 221])
-2025-07-09 13:39:05,752 - __main__ - INFO - Creating trainer and model...
+2025-07-09 13:48:18,110 - __main__ - INFO - Loaded configuration from config
+2025-07-09 13:48:18,127 - __main__ - INFO - Configuration validation completed
+2025-07-09 13:48:18,127 - __main__ - INFO - Created directories for experiment: lightning_cape_seasonal_20250709_134815
+2025-07-09 13:48:18,133 - __main__ - INFO - Saved experiment configuration to experiments/lightning_cape_seasonal_20250709_134815/config.yaml
+2025-07-09 13:48:18,133 - __main__ - INFO - Initializing data module...
+2025-07-09 13:48:18,133 - src.data.data_loader - INFO - Setting up data for stage: fit
+2025-07-09 13:48:18,135 - src.data.data_loader - INFO - Loaded 24 train, 4 val, 8 test file pairs
+2025-07-09 13:48:18,135 - src.data.data_loader - INFO - Setting up data preprocessor...
+2025-07-09 13:48:18,135 - src.data.preprocessing - INFO - Computing normalization statistics for cape
+2025-07-09 13:48:18,303 - src.data.preprocessing - INFO - cape normalization stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
+2025-07-09 13:48:18,305 - src.data.preprocessing - INFO - Computing normalization statistics for terrain
+2025-07-09 13:48:18,308 - src.data.preprocessing - INFO - terrain normalization stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
+2025-07-09 13:48:18,308 - src.data.data_loader - INFO - CAPE stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
+2025-07-09 13:48:18,308 - src.data.data_loader - INFO - Terrain stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
+2025-07-09 13:48:18,309 - src.data.dataset - INFO - Building dataset sample index...
+2025-07-09 13:48:18,462 - src.data.dataset - INFO - Built dataset index with 17592 samples
+2025-07-09 13:48:18,462 - src.data.dataset - INFO - Building dataset sample index...
+2025-07-09 13:48:18,487 - src.data.dataset - INFO - Built dataset index with 2928 samples
+2025-07-09 13:48:18,488 - __main__ - INFO - Data module initialized with 24 train files
+2025-07-09 13:48:18,515 - __main__ - INFO - Sample batch shapes:
+2025-07-09 13:48:18,515 - __main__ - INFO -   cape: torch.Size([1, 19, 26])
+2025-07-09 13:48:18,515 - __main__ - INFO -   terrain: torch.Size([1, 710, 710])
+2025-07-09 13:48:18,515 - __main__ - INFO -   lightning: torch.Size([181, 221])
+2025-07-09 13:48:18,515 - __main__ - INFO - Creating trainer and model...
 /home/dev/WRF/miniconda3/envs/lightning-pred/lib/python3.8/site-packages/lightning_fabric/connector.py:571: `precision=16` is supported for historical reasons but its usage is discouraged. Please set your precision to 16-mixed instead!
 Using 16bit Automatic Mixed Precision (AMP)
 GPU available: True (cuda), used: True
 TPU available: False, using: 0 TPU cores
 HPU available: False, using: 0 HPUs
 `Trainer(val_check_interval=1.0)` was configured so validation will run at the end of the training epoch..
-2025-07-09 13:39:05,870 - __main__ - INFO - Model created:
-2025-07-09 13:39:05,870 - __main__ - INFO -   Total parameters: 21,410,851
-2025-07-09 13:39:05,870 - __main__ - INFO -   Model size: 81.7 MB
-2025-07-09 13:39:05,870 - __main__ - INFO -   CAPE-only mode: True
-2025-07-09 13:39:05,870 - __main__ - INFO - Starting training...
-2025-07-09 13:39:05,870 - __main__ - INFO - Testing data loading...
-2025-07-09 13:39:05,870 - __main__ - INFO - Train dataloader created successfully
-2025-07-09 13:39:05,870 - __main__ - INFO - Attempting to get first batch...
+2025-07-09 13:48:18,635 - __main__ - INFO - Model created:
+2025-07-09 13:48:18,635 - __main__ - INFO -   Total parameters: 21,410,851
+2025-07-09 13:48:18,635 - __main__ - INFO -   Model size: 81.7 MB
+2025-07-09 13:48:18,635 - __main__ - INFO -   CAPE-only mode: True
+2025-07-09 13:48:18,635 - __main__ - INFO - Starting training...
+2025-07-09 13:48:18,635 - __main__ - INFO - Testing data loading...
+2025-07-09 13:48:18,635 - __main__ - INFO - Train dataloader created successfully
+2025-07-09 13:48:18,635 - __main__ - INFO - Attempting to get first batch...
    ✓ Encoders built (CAPE: 256ch, Terrain: 64ch)
    ✓ Fusion modules built (Output: 512ch)
    ✓ Core processing built (GNN: 128ch, Transformer: 128ch)
@@ -77,31 +77,31 @@ Lightning Trainer initialized:
   - Gradient accumulation: 8 steps
   - Domain adaptation: True
   - Physics loss weight: 0.1
-2025-07-09 13:39:06,060 - __main__ - INFO - First batch loaded successfully
-2025-07-09 13:39:06,061 - __main__ - INFO - Batch keys: ['cape', 'terrain', 'lightning', 'file_idx', 'time_start']
-2025-07-09 13:39:06,061 - __main__ - INFO -   cape: torch.Size([1, 1, 19, 26]) (torch.float32)
-2025-07-09 13:39:06,061 - __main__ - INFO -   terrain: torch.Size([1, 1, 710, 710]) (torch.float32)
-2025-07-09 13:39:06,061 - __main__ - INFO -   lightning: torch.Size([1, 181, 221]) (torch.float32)
-2025-07-09 13:39:06,061 - __main__ - INFO -   file_idx: torch.Size([1]) (torch.int64)
-2025-07-09 13:39:06,061 - __main__ - INFO -   time_start: torch.Size([1]) (torch.int64)
-2025-07-09 13:39:06,061 - __main__ - INFO - Testing model forward pass...
-2025-07-09 13:39:09,281 - __main__ - INFO - Model forward pass successful
-2025-07-09 13:39:09,281 - __main__ - INFO - Output shape: torch.Size([1, 1, 152, 208])
+2025-07-09 13:48:18,830 - __main__ - INFO - First batch loaded successfully
+2025-07-09 13:48:18,831 - __main__ - INFO - Batch keys: ['cape', 'terrain', 'lightning', 'file_idx', 'time_start']
+2025-07-09 13:48:18,831 - __main__ - INFO -   cape: torch.Size([1, 1, 19, 26]) (torch.float32)
+2025-07-09 13:48:18,831 - __main__ - INFO -   terrain: torch.Size([1, 1, 710, 710]) (torch.float32)
+2025-07-09 13:48:18,831 - __main__ - INFO -   lightning: torch.Size([1, 181, 221]) (torch.float32)
+2025-07-09 13:48:18,831 - __main__ - INFO -   file_idx: torch.Size([1]) (torch.int64)
+2025-07-09 13:48:18,831 - __main__ - INFO -   time_start: torch.Size([1]) (torch.int64)
+2025-07-09 13:48:18,831 - __main__ - INFO - Testing model forward pass...
+2025-07-09 13:48:22,050 - __main__ - INFO - Model forward pass successful
+2025-07-09 13:48:22,050 - __main__ - INFO - Output shape: torch.Size([1, 1, 152, 208])
 You are using a CUDA device ('NVIDIA GeForce RTX 3070 Laptop GPU') that has Tensor Cores. To properly utilize them, you should set `torch.set_float32_matmul_precision('medium' | 'high')` which will trade-off precision for performance. For more details, read https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
-2025-07-09 13:39:09,283 - src.data.data_loader - INFO - Preparing data...
-2025-07-09 13:39:09,309 - src.data.data_loader - INFO - Setting up data for stage: fit
-2025-07-09 13:39:09,312 - src.data.data_loader - INFO - Loaded 24 train, 4 val, 8 test file pairs
-2025-07-09 13:39:09,312 - src.data.data_loader - INFO - Setting up data preprocessor...
-2025-07-09 13:39:09,312 - src.data.preprocessing - INFO - Computing normalization statistics for cape
-2025-07-09 13:39:09,464 - src.data.preprocessing - INFO - cape normalization stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
-2025-07-09 13:39:09,465 - src.data.preprocessing - INFO - Computing normalization statistics for terrain
-2025-07-09 13:39:09,469 - src.data.preprocessing - INFO - terrain normalization stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
-2025-07-09 13:39:09,469 - src.data.data_loader - INFO - CAPE stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
-2025-07-09 13:39:09,469 - src.data.data_loader - INFO - Terrain stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
-2025-07-09 13:39:09,469 - src.data.dataset - INFO - Building dataset sample index...
-2025-07-09 13:39:09,624 - src.data.dataset - INFO - Built dataset index with 17592 samples
-2025-07-09 13:39:09,624 - src.data.dataset - INFO - Building dataset sample index...
-2025-07-09 13:39:09,649 - src.data.dataset - INFO - Built dataset index with 2928 samples
+2025-07-09 13:48:22,054 - src.data.data_loader - INFO - Preparing data...
+2025-07-09 13:48:22,080 - src.data.data_loader - INFO - Setting up data for stage: fit
+2025-07-09 13:48:22,082 - src.data.data_loader - INFO - Loaded 24 train, 4 val, 8 test file pairs
+2025-07-09 13:48:22,082 - src.data.data_loader - INFO - Setting up data preprocessor...
+2025-07-09 13:48:22,082 - src.data.preprocessing - INFO - Computing normalization statistics for cape
+2025-07-09 13:48:22,234 - src.data.preprocessing - INFO - cape normalization stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
+2025-07-09 13:48:22,234 - src.data.preprocessing - INFO - Computing normalization statistics for terrain
+2025-07-09 13:48:22,238 - src.data.preprocessing - INFO - terrain normalization stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
+2025-07-09 13:48:22,238 - src.data.data_loader - INFO - CAPE stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
+2025-07-09 13:48:22,238 - src.data.data_loader - INFO - Terrain stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
+2025-07-09 13:48:22,238 - src.data.dataset - INFO - Building dataset sample index...
+2025-07-09 13:48:22,393 - src.data.dataset - INFO - Built dataset index with 17592 samples
+2025-07-09 13:48:22,393 - src.data.dataset - INFO - Building dataset sample index...
+2025-07-09 13:48:22,419 - src.data.dataset - INFO - Built dataset index with 2928 samples
 LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
 
   | Name          | Type               | Params | Mode
@@ -118,12 +118,14 @@ LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
 85.643    Total estimated model params size (MB)
 0         Modules in train mode
 259       Modules in eval mode
-2025-07-09 13:39:09,680 - src.training.trainer - INFO - Computing class weights from training data...
-2025-07-09 13:39:15,600 - src.training.trainer - INFO - Computed class weights: tensor([  0.5010, 246.7735])
-2025-07-09 13:39:15,631 - src.training.trainer - INFO - Model info: {'total_parameters': 21410851, 'trainable_parameters': 21410851, 'cape_only_mode': True, 'domain_adaptation_enabled': True, 'physics_weight': 0.05, 'model_size_mb': 81.6759147644043, 'components': {'cape_encoder': 256, 'terrain_encoder': 64, 'era5_encoder': 0, 'fusion_output': 512, 'gnn_hidden': 128, 'transformer_hidden': 128, 'prediction_output': 1}}
-2025-07-09 13:39:15,631 - src.training.trainer - INFO - Domain adaptation will be enabled after epoch 10
-Sanity Checking: |          | 0/? [00:00<?, ?it/s]Sanity Checking:   0%|          | 0/2 [00:00<?, ?it/s]Sanity Checking DataLoader 0:   0%|          | 0/2 [00:00<?, ?it/s]2025-07-09 13:39:16,581 - __main__ - ERROR - Training failed with detailed traceback:
-2025-07-09 13:39:16,582 - __main__ - ERROR - Traceback (most recent call last):
+2025-07-09 13:48:22,450 - src.training.trainer - INFO - Computing class weights from training data...
+2025-07-09 13:48:28,404 - src.training.trainer - INFO - Computed class weights: tensor([  0.5010, 246.7735])
+2025-07-09 13:48:28,436 - src.training.trainer - INFO - Model info: {'total_parameters': 21410851, 'trainable_parameters': 21410851, 'cape_only_mode': True, 'domain_adaptation_enabled': True, 'physics_weight': 0.05, 'model_size_mb': 81.6759147644043, 'components': {'cape_encoder': 256, 'terrain_encoder': 64, 'era5_encoder': 0, 'fusion_output': 512, 'gnn_hidden': 128, 'transformer_hidden': 128, 'prediction_output': 1}}
+2025-07-09 13:48:28,436 - src.training.trainer - INFO - Domain adaptation will be enabled after epoch 10
+Sanity Checking: |          | 0/? [00:00<?, ?it/s]Sanity Checking:   0%|          | 0/2 [00:00<?, ?it/s]Sanity Checking DataLoader 0:   0%|          | 0/2 [00:00<?, ?it/s]Sanity Checking DataLoader 0:  50%|█████     | 1/2 [00:00<00:00,  1.32it/s]Sanity Checking DataLoader 0: 100%|██████████| 2/2 [00:01<00:00,  1.83it/s]/mnt/scratch/lightning_prediction/./src/training/metrics.py:128: invalid value encountered in cast
+/mnt/scratch/lightning_prediction/./src/training/metrics.py:134: Only one class present in targets
+2025-07-09 13:48:29,777 - __main__ - ERROR - Training failed with detailed traceback:
+2025-07-09 13:48:29,778 - __main__ - ERROR - Traceback (most recent call last):
   File "scripts/train.py", line 230, in main
     trainer.fit(lightning_module, datamodule)
   File "/home/dev/WRF/miniconda3/envs/lightning-pred/lib/python3.8/site-packages/pytorch_lightning/trainer/trainer.py", line 538, in fit
@@ -140,32 +142,20 @@ LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
     val_loop.run()
   File "/home/dev/WRF/miniconda3/envs/lightning-pred/lib/python3.8/site-packages/pytorch_lightning/loops/utilities.py", line 178, in _decorator
     return loop_run(self, *args, **kwargs)
-  File "/home/dev/WRF/miniconda3/envs/lightning-pred/lib/python3.8/site-packages/pytorch_lightning/loops/evaluation_loop.py", line 135, in run
-    self._evaluation_step(batch, batch_idx, dataloader_idx, dataloader_iter)
-  File "/home/dev/WRF/miniconda3/envs/lightning-pred/lib/python3.8/site-packages/pytorch_lightning/loops/evaluation_loop.py", line 396, in _evaluation_step
-    output = call._call_strategy_hook(trainer, hook_name, *step_args)
-  File "/home/dev/WRF/miniconda3/envs/lightning-pred/lib/python3.8/site-packages/pytorch_lightning/trainer/call.py", line 319, in _call_strategy_hook
+  File "/home/dev/WRF/miniconda3/envs/lightning-pred/lib/python3.8/site-packages/pytorch_lightning/loops/evaluation_loop.py", line 142, in run
+    return self.on_run_end()
+  File "/home/dev/WRF/miniconda3/envs/lightning-pred/lib/python3.8/site-packages/pytorch_lightning/loops/evaluation_loop.py", line 254, in on_run_end
+    self._on_evaluation_epoch_end()
+  File "/home/dev/WRF/miniconda3/envs/lightning-pred/lib/python3.8/site-packages/pytorch_lightning/loops/evaluation_loop.py", line 334, in _on_evaluation_epoch_end
+    call._call_lightning_module_hook(trainer, hook_name)
+  File "/home/dev/WRF/miniconda3/envs/lightning-pred/lib/python3.8/site-packages/pytorch_lightning/trainer/call.py", line 167, in _call_lightning_module_hook
     output = fn(*args, **kwargs)
-  File "/home/dev/WRF/miniconda3/envs/lightning-pred/lib/python3.8/site-packages/pytorch_lightning/strategies/strategy.py", line 411, in validation_step
-    return self.lightning_module.validation_step(*args, **kwargs)
-  File "/mnt/scratch/lightning_prediction/./src/training/trainer.py", line 275, in validation_step
-    loss_dict = self.loss_function(
-  File "/home/dev/WRF/miniconda3/envs/lightning-pred/lib/python3.8/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
-    return self._call_impl(*args, **kwargs)
-  File "/home/dev/WRF/miniconda3/envs/lightning-pred/lib/python3.8/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
-    return forward_call(*args, **kwargs)
-  File "/mnt/scratch/lightning_prediction/./src/training/loss_functions.py", line 436, in forward
-    main_loss = self.prediction_loss(predictions, targets)
-  File "/home/dev/WRF/miniconda3/envs/lightning-pred/lib/python3.8/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
-    return self._call_impl(*args, **kwargs)
-  File "/home/dev/WRF/miniconda3/envs/lightning-pred/lib/python3.8/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
-    return forward_call(*args, **kwargs)
-  File "/mnt/scratch/lightning_prediction/./src/training/loss_functions.py", line 65, in forward
-    return self._focal_loss(predictions, targets)
-  File "/mnt/scratch/lightning_prediction/./src/training/loss_functions.py", line 78, in _focal_loss
-    bce_loss = F.binary_cross_entropy(predictions, targets, reduction='none')
-  File "/home/dev/WRF/miniconda3/envs/lightning-pred/lib/python3.8/site-packages/torch/nn/functional.py", line 3163, in binary_cross_entropy
-    raise ValueError(
-ValueError: Using a target size (torch.Size([1, 181, 221])) that is different to the input size (torch.Size([1, 152, 208])) is deprecated. Please ensure they have the same size.
+  File "/mnt/scratch/lightning_prediction/./src/training/trainer.py", line 336, in on_validation_epoch_end
+    val_metrics = self.val_metrics.compute()
+  File "/mnt/scratch/lightning_prediction/./src/training/metrics.py", line 110, in compute
+    metrics.update(self._compute_probabilistic_metrics(all_probabilities, all_targets))
+  File "/mnt/scratch/lightning_prediction/./src/training/metrics.py", line 194, in _compute_probabilistic_metrics
+    'brier_score': np.mean((probabilities - binary_targets) ** 2)
+ValueError: operands could not be broadcast together with shapes (63232,) (80002,) 
 
-                                                                   
+                                                                           

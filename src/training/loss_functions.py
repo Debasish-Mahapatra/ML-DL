@@ -57,14 +57,12 @@ class LightningLoss(nn.Module):
         if predictions.dim() == 4 and predictions.shape[1] == 1:
             predictions = predictions.squeeze(1)
             
-            
         # FIX: Resize targets to match predictions if sizes differ
         if targets.shape[-2:] != predictions.shape[-2:]:
             targets = F.interpolate(
                 targets.unsqueeze(1), size=predictions.shape[-2:],
                 mode='bilinear', align_corners=False
             ).squeeze(1)
-
         
         # Apply label smoothing if specified
         if self.label_smoothing > 0:
@@ -73,21 +71,24 @@ class LightningLoss(nn.Module):
         if self.loss_type == "focal":
             return self._focal_loss(predictions, targets)
         elif self.loss_type == "bce":
-            return F.binary_cross_entropy(predictions, targets, reduction='mean')
+            return F.binary_cross_entropy_with_logits(predictions, targets, reduction='mean')  # FIX: Use logits version
         elif self.loss_type == "weighted_bce":
-            return F.binary_cross_entropy(predictions, targets, 
-                                        pos_weight=self.pos_weight, reduction='mean')
+            return F.binary_cross_entropy_with_logits(predictions, targets, 
+                                                    pos_weight=self.pos_weight, reduction='mean')  # FIX: Use logits version
         else:
             raise ValueError(f"Unknown loss type: {self.loss_type}")
     
     def _focal_loss(self, predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         """Compute focal loss for handling class imbalance."""
         
-        # Compute binary cross entropy
-        bce_loss = F.binary_cross_entropy(predictions, targets, reduction='none')
+        # FIX: Use binary_cross_entropy_with_logits for mixed precision compatibility
+        bce_loss = F.binary_cross_entropy_with_logits(predictions, targets, reduction='none')
+        
+        # Apply sigmoid to get probabilities for focal weight calculation
+        probs = torch.sigmoid(predictions)  # FIX: Apply sigmoid to logits
         
         # Compute focal weight
-        pt = torch.where(targets == 1, predictions, 1 - predictions)
+        pt = torch.where(targets == 1, probs, 1 - probs)
         focal_weight = (1 - pt) ** self.gamma
         
         # Apply alpha weighting

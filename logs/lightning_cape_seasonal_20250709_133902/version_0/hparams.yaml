@@ -1,0 +1,182 @@
+config:
+  model:
+    name: LightningPredictor
+    encoders:
+      cape:
+        type: CNN2D
+        channels:
+        - 32
+        - 64
+        - 128
+        - 256
+        kernel_sizes:
+        - 7
+        - 5
+        - 3
+        - 3
+        activation: relu
+        dropout: 0.1
+      era5:
+        type: CNN3D
+        in_channels: 9
+        pressure_levels: 7
+        channels:
+        - 32
+        - 64
+        - 128
+        - 256
+        kernel_sizes:
+        - 3
+        - 3
+        - 3
+        - 3
+        activation: relu
+        dropout: 0.1
+      terrain:
+        type: TerrainEncoder
+        embedding_dim: 64
+        learnable_downsample: true
+        downsample_method: learned_conv
+    fusion:
+      meteorological:
+        type: FeatureFusion
+        fusion_method: concatenation
+        hidden_dim: 512
+      multiscale:
+        type: TerrainGuidedUpsampling
+        upsampling_factor: 8.33
+        guidance_weight: 0.3
+    gnn:
+      type: GraphAttentionNetwork
+      hidden_dim: 128
+      num_layers: 2
+      num_heads: 4
+      dropout: 0.1
+    transformer:
+      type: LightweightTransformer
+      hidden_dim: 128
+      num_layers: 4
+      num_heads: 8
+      dropout: 0.1
+      attention_type: linear
+    prediction_head:
+      hidden_dim: 128
+      output_dim: 1
+      activation: sigmoid
+    domain_adapter:
+      terrain_adaptation_dim: 64
+      meteorological_adaptation_dim: 32
+      dropout: 0.1
+  data:
+    root_dir: data/processed
+    splits_dir: data/splits
+    meteorological:
+      cape:
+        path: meteorological/cape
+        resolution_km: 25
+        variables:
+        - cape
+      era5:
+        path: meteorological/era5
+        resolution_km: 25
+        pressure_levels:
+        - 1000
+        - 900
+        - 800
+        - 700
+        - 600
+        - 500
+        - 400
+        variables:
+        - u_wind
+        - v_wind
+        - vertical_velocity
+        - temperature
+        - geopotential
+        - ice_water_content
+        - liquid_water_content
+        - water_vapor_content
+        - specific_humidity
+    terrain:
+      path: terrain/terrain_odisha_1km.nc
+      resolution_km: 1
+      variables:
+      - elevation
+    lightning:
+      path: lightning
+      resolution_km: 3
+      variables:
+      - lightning_occurrence
+    domain:
+      name: odisha
+      grid_size_25km:
+      - 85
+      - 85
+      grid_size_3km:
+      - 710
+      - 710
+      grid_size_1km:
+      - 2130
+      - 2130
+    temporal:
+      resolution: hourly
+      sequence_length: 1
+    batch_size: 1
+    num_workers: 4
+    pin_memory: true
+    splits:
+      train: train_files.txt
+      val: val_files.txt
+      test: test_files.txt
+    augmentation:
+      spatial:
+        rotation:
+        - -30
+        - 30
+        flip_horizontal: 0.5
+        flip_vertical: 0.5
+      meteorological:
+        noise_std: 0.01
+        scale_factor:
+        - 0.95
+        - 1.05
+  training:
+    experiment_name: cape_only_v1
+    project_name: lightning_prediction
+    max_epochs: 100
+    patience: 15
+    min_delta: '1e-4'
+    optimizer:
+      type: AdamW
+      lr: '1e-4'
+      weight_decay: '1e-5'
+    scheduler:
+      type: CosineAnnealingWarmRestarts
+      T_0: 50
+      T_mult: 2
+      eta_min: '1e-6'
+    loss:
+      type: composite
+      primary: focal
+      physics_weight: 0.1
+      charge_separation_weight: 0.05
+      microphysics_weight: 0.05
+      terrain_consistency_weight: 0.02
+    accelerator: gpu
+    devices: 1
+    precision: 16
+    gradient_accumulation_steps: 8
+    max_grad_norm: 1.0
+    seed: 42
+    deterministic: true
+    log_every_n_steps: 50
+    val_check_interval: 1.0
+    save_top_k: 3
+    save_last: true
+    monitor: val_f1_score
+    mode: max
+    domain_adaptation:
+      enabled: true
+      adaptation_layers:
+      - terrain
+      - meteorological

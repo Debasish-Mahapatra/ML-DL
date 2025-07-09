@@ -218,9 +218,21 @@ def main():
         
         if args.resume_from:
             logger.info(f"Resuming training from {args.resume_from}")
-            trainer.fit(lightning_module, datamodule, ckpt_path=args.resume_from)
+            try:
+                trainer.fit(lightning_module, datamodule, ckpt_path=args.resume_from)
+            except Exception as e:
+                import traceback
+                logger.error(f"Training failed with detailed traceback:")
+                logger.error(traceback.format_exc())
+                return 1
         else:
-            trainer.fit(lightning_module, datamodule)
+            try:
+                trainer.fit(lightning_module, datamodule)
+            except Exception as e:
+                import traceback
+                logger.error(f"Training failed with detailed traceback:")
+                logger.error(traceback.format_exc())
+                return 1
         
         logger.info("Training completed successfully")
         

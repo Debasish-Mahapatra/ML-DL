@@ -49,7 +49,7 @@ data:
     sequence_length: 1
     
   # Data Loading
-  batch_size: 4
+  batch_size: 1  # FIX: Reduce from 4 to 1 to save GPU memory
   num_workers: 4
   pin_memory: true
   

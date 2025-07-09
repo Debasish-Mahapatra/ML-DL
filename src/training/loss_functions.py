@@ -56,6 +56,15 @@ class LightningLoss(nn.Module):
         # Ensure same shape
         if predictions.dim() == 4 and predictions.shape[1] == 1:
             predictions = predictions.squeeze(1)
+            
+            
+        # FIX: Resize targets to match predictions if sizes differ
+        if targets.shape[-2:] != predictions.shape[-2:]:
+            targets = F.interpolate(
+                targets.unsqueeze(1), size=predictions.shape[-2:],
+                mode='bilinear', align_corners=False
+            ).squeeze(1)
+
         
         # Apply label smoothing if specified
         if self.label_smoothing > 0:

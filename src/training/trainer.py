@@ -108,17 +108,17 @@ class LightningTrainer(pl.LightningModule):
         if optimizer_type == "adamw":  # FIX: Changed from optimizer_config.type == "adamw"
             optimizer = AdamW(
                 self.parameters(),
-                lr=optimizer_config.lr,
-                weight_decay=optimizer_config.weight_decay,
+                lr=float(optimizer_config.lr),  # FIX: Ensure float
+                weight_decay=float(optimizer_config.weight_decay),  # FIX: Ensure float
                 betas=getattr(optimizer_config, 'betas', (0.9, 0.999)),
                 eps=getattr(optimizer_config, 'eps', 1e-8)
             )
         elif optimizer_type == "sgd":  # FIX: Changed from optimizer_config.type == "sgd"
             optimizer = SGD(
                 self.parameters(),
-                lr=optimizer_config.lr,
+                lr=float(optimizer_config.lr),  # FIX: Ensure float
                 momentum=getattr(optimizer_config, 'momentum', 0.9),
-                weight_decay=optimizer_config.weight_decay
+                weight_decay=float(optimizer_config.weight_decay)  # FIX: Ensure float
             )
         else:
             raise ValueError(f"Unknown optimizer type: {optimizer_config.type}")
@@ -134,9 +134,9 @@ class LightningTrainer(pl.LightningModule):
         if scheduler_type in ["cosine", "cosineannelingwarmrestarts"]:  # FIX: Changed from scheduler_config.type == "cosine"
             scheduler = CosineAnnealingWarmRestarts(
                 optimizer,
-                T_0=scheduler_config.T_0,
-                T_mult=getattr(scheduler_config, 'T_mult', 2),
-                eta_min=scheduler_config.eta_min
+                T_0=int(scheduler_config.T_0),  # FIX: Ensure integer
+                T_mult=int(getattr(scheduler_config, 'T_mult', 2)),  # FIX: Ensure integer
+                eta_min=float(scheduler_config.eta_min)  # FIX: Ensure floatn
             )
             lr_scheduler_config = {
                 "scheduler": scheduler,
@@ -147,7 +147,7 @@ class LightningTrainer(pl.LightningModule):
                 optimizer,
                 max_lr=optimizer_config.lr,
                 total_steps=self.trainer.estimated_stepping_batches,
-                pct_start=getattr(scheduler_config, 'pct_start', 0.3),
+                pct_start=float(getattr(scheduler_config, 'pct_start', 0.3)),  # FIX: Ensure float
                 anneal_strategy=getattr(scheduler_config, 'anneal_strategy', 'cos')
             )
             lr_scheduler_config = {
@@ -158,9 +158,9 @@ class LightningTrainer(pl.LightningModule):
             scheduler = ReduceLROnPlateau(
                 optimizer,
                 mode='max',
-                factor=getattr(scheduler_config, 'factor', 0.5),
-                patience=getattr(scheduler_config, 'patience', 10),
-                threshold=getattr(scheduler_config, 'threshold', 1e-4)
+                factor=float(getattr(scheduler_config, 'factor', 0.5)),  # FIX: Ensure float
+                patience=int(getattr(scheduler_config, 'patience', 10)),  # FIX: Ensure integer
+                threshold=float(getattr(scheduler_config, 'threshold', 1e-4))  # FIX: Ensure float
             )
             lr_scheduler_config = {
                 "scheduler": scheduler,
@@ -607,7 +607,7 @@ def create_trainer(config: DictConfig,
         accelerator=config.training.accelerator,
         devices=int(config.training.devices),  # FIX: Ensure integers
         precision=int(config.training.precision),  # FIX: Ensure integers
-        gradient_clip_val=getattr(config.training, 'max_grad_norm', None),
+        gradient_clip_val=float(getattr(config.training, 'max_grad_norm', None)) if getattr(config.training, 'max_grad_norm', None) is not None else None,  # FIX: Ensure float or None
         accumulate_grad_batches=int(getattr(config.training, 'gradient_accumulation_steps', 1)),  # FIX: Ensure integers
         callbacks=callbacks,
         logger=experiment_logger,

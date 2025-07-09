@@ -182,6 +182,40 @@ def main():
     try:
         logger.info("Starting training...")
         
+        # DEBUG: Test data loading before training
+        logger.info("Testing data loading...")
+        try:
+            train_loader = datamodule.train_dataloader()
+            logger.info("Train dataloader created successfully")
+            
+            # Try to get first batch
+            logger.info("Attempting to get first batch...")
+            first_batch = next(iter(train_loader))
+            logger.info(f"First batch loaded successfully")
+            logger.info(f"Batch keys: {list(first_batch.keys())}")
+            for key, value in first_batch.items():
+                logger.info(f"  {key}: {value.shape} ({value.dtype})")
+            
+        except Exception as e:
+            logger.error(f"Data loading failed: {e}")
+            return 1
+        
+        # DEBUG: Test model forward pass
+        logger.info("Testing model forward pass...")
+        try:
+            lightning_module.eval()
+            with torch.no_grad():
+                output = lightning_module(
+                    first_batch['cape'],
+                    first_batch['terrain'],
+                    first_batch.get('era5', None)
+                )
+                logger.info("Model forward pass successful")
+                logger.info(f"Output shape: {output['lightning_prediction'].shape}")
+        except Exception as e:
+            logger.error(f"Model forward pass failed: {e}")
+            return 1
+        
         if args.resume_from:
             logger.info(f"Resuming training from {args.resume_from}")
             trainer.fit(lightning_module, datamodule, ckpt_path=args.resume_from)

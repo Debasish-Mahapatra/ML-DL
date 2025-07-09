@@ -14,69 +14,55 @@ Tensorboard is available. To monitor training, run:
 
 Log locations:
   Training logs: logs/
-  Experiment logs: experiments/lightning_cape_seasonal_20250709_114242/logs/
-  Checkpoints: experiments/lightning_cape_seasonal_20250709_114242/checkpoints/
+  Experiment logs: experiments/lightning_cape_seasonal_20250709_122632/logs/
+  Checkpoints: experiments/lightning_cape_seasonal_20250709_122632/checkpoints/
 [1;33m⚠ Skipping data preprocessing[0m
 [0;34m==== Training Lightning Prediction Model ====[0m
-Experiment name: lightning_cape_seasonal_20250709_114242
+Experiment name: lightning_cape_seasonal_20250709_122632
 Configuration: config
 
 [0;32m✓ GPU detected - training will use CUDA[0m
 NVIDIA GeForce RTX 3070 Laptop GPU, 8192
 
 Seed set to 42
-2025-07-09 11:42:45,407 - __main__ - INFO - Loaded configuration from config
-2025-07-09 11:42:45,424 - __main__ - INFO - Configuration validation completed
-2025-07-09 11:42:45,425 - __main__ - INFO - Created directories for experiment: lightning_cape_seasonal_20250709_114242
-2025-07-09 11:42:45,430 - __main__ - INFO - Saved experiment configuration to experiments/lightning_cape_seasonal_20250709_114242/config.yaml
-2025-07-09 11:42:45,430 - __main__ - INFO - Initializing data module...
-2025-07-09 11:42:45,430 - src.data.data_loader - INFO - Setting up data for stage: fit
-2025-07-09 11:42:45,433 - src.data.data_loader - INFO - Loaded 24 train, 4 val, 8 test file pairs
-2025-07-09 11:42:45,433 - src.data.data_loader - INFO - Setting up data preprocessor...
-2025-07-09 11:42:45,433 - src.data.preprocessing - INFO - Computing normalization statistics for cape
-2025-07-09 11:42:45,597 - src.data.preprocessing - INFO - cape normalization stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
-2025-07-09 11:42:45,598 - src.data.preprocessing - INFO - Computing normalization statistics for terrain
-2025-07-09 11:42:45,602 - src.data.preprocessing - INFO - terrain normalization stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
-2025-07-09 11:42:45,602 - src.data.data_loader - INFO - CAPE stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
-2025-07-09 11:42:45,602 - src.data.data_loader - INFO - Terrain stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
-2025-07-09 11:42:45,603 - src.data.dataset - INFO - Building dataset sample index...
-2025-07-09 11:42:45,756 - src.data.dataset - INFO - Built dataset index with 17592 samples
-2025-07-09 11:42:45,756 - src.data.dataset - INFO - Building dataset sample index...
-2025-07-09 11:42:45,781 - src.data.dataset - INFO - Built dataset index with 2928 samples
-2025-07-09 11:42:45,781 - __main__ - INFO - Data module initialized with 24 train files
-2025-07-09 11:42:45,806 - __main__ - INFO - Sample batch shapes:
-2025-07-09 11:42:45,806 - __main__ - INFO -   cape: torch.Size([1, 19, 26])
-2025-07-09 11:42:45,806 - __main__ - INFO -   terrain: torch.Size([1, 710, 710])
-2025-07-09 11:42:45,806 - __main__ - INFO -   lightning: torch.Size([181, 221])
-2025-07-09 11:42:45,806 - __main__ - INFO - Creating trainer and model...
+2025-07-09 12:26:35,403 - __main__ - INFO - Loaded configuration from config
+2025-07-09 12:26:35,420 - __main__ - INFO - Configuration validation completed
+2025-07-09 12:26:35,421 - __main__ - INFO - Created directories for experiment: lightning_cape_seasonal_20250709_122632
+2025-07-09 12:26:35,426 - __main__ - INFO - Saved experiment configuration to experiments/lightning_cape_seasonal_20250709_122632/config.yaml
+2025-07-09 12:26:35,426 - __main__ - INFO - Initializing data module...
+2025-07-09 12:26:35,426 - src.data.data_loader - INFO - Setting up data for stage: fit
+2025-07-09 12:26:35,429 - src.data.data_loader - INFO - Loaded 24 train, 4 val, 8 test file pairs
+2025-07-09 12:26:35,429 - src.data.data_loader - INFO - Setting up data preprocessor...
+2025-07-09 12:26:35,429 - src.data.preprocessing - INFO - Computing normalization statistics for cape
+2025-07-09 12:26:35,597 - src.data.preprocessing - INFO - cape normalization stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
+2025-07-09 12:26:35,598 - src.data.preprocessing - INFO - Computing normalization statistics for terrain
+2025-07-09 12:26:35,602 - src.data.preprocessing - INFO - terrain normalization stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
+2025-07-09 12:26:35,602 - src.data.data_loader - INFO - CAPE stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
+2025-07-09 12:26:35,602 - src.data.data_loader - INFO - Terrain stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
+2025-07-09 12:26:35,602 - src.data.dataset - INFO - Building dataset sample index...
+2025-07-09 12:26:35,757 - src.data.dataset - INFO - Built dataset index with 17592 samples
+2025-07-09 12:26:35,757 - src.data.dataset - INFO - Building dataset sample index...
+2025-07-09 12:26:35,782 - src.data.dataset - INFO - Built dataset index with 2928 samples
+2025-07-09 12:26:35,782 - __main__ - INFO - Data module initialized with 24 train files
+2025-07-09 12:26:35,806 - __main__ - INFO - Sample batch shapes:
+2025-07-09 12:26:35,806 - __main__ - INFO -   cape: torch.Size([1, 19, 26])
+2025-07-09 12:26:35,806 - __main__ - INFO -   terrain: torch.Size([1, 710, 710])
+2025-07-09 12:26:35,806 - __main__ - INFO -   lightning: torch.Size([181, 221])
+2025-07-09 12:26:35,806 - __main__ - INFO - Creating trainer and model...
 /home/dev/WRF/miniconda3/envs/lightning-pred/lib/python3.8/site-packages/lightning_fabric/connector.py:571: `precision=16` is supported for historical reasons but its usage is discouraged. Please set your precision to 16-mixed instead!
 Using 16bit Automatic Mixed Precision (AMP)
 GPU available: True (cuda), used: True
 TPU available: False, using: 0 TPU cores
 HPU available: False, using: 0 HPUs
 `Trainer(val_check_interval=1.0)` was configured so validation will run at the end of the training epoch..
-2025-07-09 11:42:45,952 - __main__ - INFO - Model created:
-2025-07-09 11:42:45,952 - __main__ - INFO -   Total parameters: 25,168,643
-2025-07-09 11:42:45,952 - __main__ - INFO -   Model size: 96.0 MB
-2025-07-09 11:42:45,952 - __main__ - INFO -   CAPE-only mode: True
-2025-07-09 11:42:45,952 - __main__ - INFO - Starting training...
-You are using a CUDA device ('NVIDIA GeForce RTX 3070 Laptop GPU') that has Tensor Cores. To properly utilize them, you should set `torch.set_float32_matmul_precision('medium' | 'high')` which will trade-off precision for performance. For more details, read https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
-2025-07-09 11:42:45,953 - src.data.data_loader - INFO - Preparing data...
-2025-07-09 11:42:45,993 - src.data.data_loader - INFO - Setting up data for stage: fit
-2025-07-09 11:42:45,995 - src.data.data_loader - INFO - Loaded 24 train, 4 val, 8 test file pairs
-2025-07-09 11:42:45,995 - src.data.data_loader - INFO - Setting up data preprocessor...
-2025-07-09 11:42:45,995 - src.data.preprocessing - INFO - Computing normalization statistics for cape
-2025-07-09 11:42:46,180 - src.data.preprocessing - INFO - cape normalization stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
-2025-07-09 11:42:46,181 - src.data.preprocessing - INFO - Computing normalization statistics for terrain
-2025-07-09 11:42:46,185 - src.data.preprocessing - INFO - terrain normalization stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
-2025-07-09 11:42:46,185 - src.data.data_loader - INFO - CAPE stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
-2025-07-09 11:42:46,185 - src.data.data_loader - INFO - Terrain stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
-2025-07-09 11:42:46,185 - src.data.dataset - INFO - Building dataset sample index...
-2025-07-09 11:42:46,339 - src.data.dataset - INFO - Built dataset index with 17592 samples
-2025-07-09 11:42:46,340 - src.data.dataset - INFO - Building dataset sample index...
-2025-07-09 11:42:46,365 - src.data.dataset - INFO - Built dataset index with 2928 samples
-LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
-2025-07-09 11:42:46,539 - __main__ - ERROR - Training failed: Unknown optimizer type: AdamW
+2025-07-09 12:26:35,945 - __main__ - INFO - Model created:
+2025-07-09 12:26:35,945 - __main__ - INFO -   Total parameters: 25,168,643
+2025-07-09 12:26:35,945 - __main__ - INFO -   Model size: 96.0 MB
+2025-07-09 12:26:35,945 - __main__ - INFO -   CAPE-only mode: True
+2025-07-09 12:26:35,945 - __main__ - INFO - Starting training...
+2025-07-09 12:26:35,945 - __main__ - INFO - Testing data loading...
+2025-07-09 12:26:35,945 - __main__ - INFO - Train dataloader created successfully
+2025-07-09 12:26:35,945 - __main__ - INFO - Attempting to get first batch...
    ✓ Encoders built (CAPE: 256ch, Terrain: 64ch)
    ✓ Fusion modules built (Output: 512ch)
    ✓ Core processing built (GNN: 256ch, Transformer: 256ch)
@@ -91,3 +77,12 @@ Lightning Trainer initialized:
   - Gradient accumulation: 4 steps
   - Domain adaptation: True
   - Physics loss weight: 0.1
+2025-07-09 12:26:36,208 - __main__ - INFO - First batch loaded successfully
+2025-07-09 12:26:36,209 - __main__ - INFO - Batch keys: ['cape', 'terrain', 'lightning', 'file_idx', 'time_start']
+2025-07-09 12:26:36,209 - __main__ - INFO -   cape: torch.Size([4, 1, 19, 26]) (torch.float32)
+2025-07-09 12:26:36,209 - __main__ - INFO -   terrain: torch.Size([4, 1, 710, 710]) (torch.float32)
+2025-07-09 12:26:36,209 - __main__ - INFO -   lightning: torch.Size([4, 181, 221]) (torch.float32)
+2025-07-09 12:26:36,209 - __main__ - INFO -   file_idx: torch.Size([4]) (torch.int64)
+2025-07-09 12:26:36,209 - __main__ - INFO -   time_start: torch.Size([4]) (torch.int64)
+2025-07-09 12:26:36,209 - __main__ - INFO - Testing model forward pass...
+2025-07-09 12:26:38,462 - __main__ - ERROR - Model forward pass failed: Given groups=1, weight of size [64, 64, 4, 4], expected input[4, 96, 710, 710] to have 64 channels, but got 96 channels instead

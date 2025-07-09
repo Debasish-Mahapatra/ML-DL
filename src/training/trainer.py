@@ -101,7 +101,11 @@ class LightningTrainer(pl.LightningModule):
         # Optimizer selection
         optimizer_config = self.training_config.optimizer
         
-        if optimizer_config.type == "adamw":
+        # FIX: Make optimizer type comparison case-insensitive
+        optimizer_type = optimizer_config.type.lower()
+        
+        
+        if optimizer_type == "adamw":  # FIX: Changed from optimizer_config.type == "adamw"
             optimizer = AdamW(
                 self.parameters(),
                 lr=optimizer_config.lr,
@@ -109,7 +113,7 @@ class LightningTrainer(pl.LightningModule):
                 betas=getattr(optimizer_config, 'betas', (0.9, 0.999)),
                 eps=getattr(optimizer_config, 'eps', 1e-8)
             )
-        elif optimizer_config.type == "sgd":
+        elif optimizer_type == "sgd":  # FIX: Changed from optimizer_config.type == "sgd"
             optimizer = SGD(
                 self.parameters(),
                 lr=optimizer_config.lr,
@@ -122,7 +126,12 @@ class LightningTrainer(pl.LightningModule):
         # Learning rate scheduler
         scheduler_config = self.training_config.scheduler
         
-        if scheduler_config.type == "cosine":
+        
+        # FIX: Make scheduler type comparison case-insensitive and handle different naming
+        scheduler_type = scheduler_config.type.lower()
+        
+        
+        if scheduler_type in ["cosine", "cosineannelingwarmrestarts"]:  # FIX: Changed from scheduler_config.type == "cosine"
             scheduler = CosineAnnealingWarmRestarts(
                 optimizer,
                 T_0=scheduler_config.T_0,
@@ -133,7 +142,7 @@ class LightningTrainer(pl.LightningModule):
                 "scheduler": scheduler,
                 "interval": "step"
             }
-        elif scheduler_config.type == "onecycle":
+        elif scheduler_type == "onecycle":  # FIX: Changed from scheduler_config.type == "onecycle"
             scheduler = OneCycleLR(
                 optimizer,
                 max_lr=optimizer_config.lr,
@@ -145,7 +154,7 @@ class LightningTrainer(pl.LightningModule):
                 "scheduler": scheduler,
                 "interval": "step"
             }
-        elif scheduler_config.type == "plateau":
+        elif scheduler_type == "plateau":  # FIX: Changed from scheduler_config.type == "plateau"
             scheduler = ReduceLROnPlateau(
                 optimizer,
                 mode='max',
@@ -498,7 +507,10 @@ class DomainAdaptationTrainer(LightningTrainer):
         
         optimizer_config = self.training_config.optimizer
         
-        if optimizer_config.type == "adamw":
+        # FIX: Make optimizer type comparison case-insensitive
+        optimizer_type = optimizer_config.type.lower()
+        
+        if optimizer_type == "adamw":  # FIX: Changed from optimizer_config.type == "adamw"
             optimizer = AdamW([
                 {'params': backbone_params, 'lr': base_lr},
                 {'params': adapter_params, 'lr': adapter_lr}
@@ -569,7 +581,7 @@ def create_trainer(config: DictConfig,
         filename="{epoch:02d}-{val_f1_score:.3f}",
         monitor="val_f1_score",
         mode="max",
-        save_top_k=3,
+        save_top_k=int(config.training.save_top_k),  # FIX: Ensure it's an integer
         save_last=True,
         verbose=True
     )
@@ -579,8 +591,8 @@ def create_trainer(config: DictConfig,
     early_stop_callback = EarlyStopping(
         monitor="val_f1_score",
         mode="max",
-        patience=config.training.patience,
-        min_delta=config.training.min_delta,
+        patience=int(config.training.patience),  # FIX: Ensure it's an integer
+        min_delta=float(config.training.min_delta),  # FIX: Ensure it's a float
         verbose=True
     )
     callbacks.append(early_stop_callback)
@@ -591,17 +603,17 @@ def create_trainer(config: DictConfig,
     
     # Create trainer
     trainer = pl.Trainer(
-        max_epochs=config.training.max_epochs,
+        max_epochs=int(config.training.max_epochs),  # FIX: Ensure integers
         accelerator=config.training.accelerator,
-        devices=config.training.devices,
-        precision=config.training.precision,
+        devices=int(config.training.devices),  # FIX: Ensure integers
+        precision=int(config.training.precision),  # FIX: Ensure integers
         gradient_clip_val=getattr(config.training, 'max_grad_norm', None),
-        accumulate_grad_batches=getattr(config.training, 'gradient_accumulation_steps', 1),
+        accumulate_grad_batches=int(getattr(config.training, 'gradient_accumulation_steps', 1)),  # FIX: Ensure integers
         callbacks=callbacks,
         logger=experiment_logger,
-        deterministic=config.training.deterministic,
-        log_every_n_steps=config.training.log_every_n_steps,
-        val_check_interval=config.training.val_check_interval,
+        deterministic=bool(config.training.deterministic),  # FIX: Ensure boolean
+        log_every_n_steps=int(config.training.log_every_n_steps),  # FIX: Ensure integers
+        val_check_interval=float(config.training.val_check_interval),  # FIX: Ensure float
         enable_checkpointing=True,
         enable_progress_bar=True,
         enable_model_summary=True

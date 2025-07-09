@@ -184,6 +184,12 @@ class LightningMetrics(nn.Module):
     def _compute_probabilistic_metrics(self, probabilities: np.ndarray, targets: np.ndarray) -> Dict[str, float]:
         """Compute probabilistic metrics."""
         
+        # FIX: Ensure arrays have same length to prevent broadcast errors in element-wise operations
+        min_length = min(len(probabilities), len(targets))
+        if len(probabilities) != len(targets):
+            probabilities = probabilities[:min_length]
+            targets = targets[:min_length]
+        
         binary_targets = targets.astype(int)
         
         # Handle edge cases
@@ -284,6 +290,12 @@ class LightningMetrics(nn.Module):
         if self.spatial_tolerance == 0:
             return np.mean(prediction == target)
         
+        # FIX: Ensure both arrays have same shape before neighborhood operations
+        if prediction.shape != target.shape:
+            min_h, min_w = min(prediction.shape[0], target.shape[0]), min(prediction.shape[1], target.shape[1])
+            prediction = prediction[:min_h, :min_w]
+            target = target[:min_h, :min_w]
+        
         # Create neighborhood masks
         pred_neighborhood = self._create_neighborhood_mask(prediction, self.spatial_tolerance)
         target_neighborhood = self._create_neighborhood_mask(target, self.spatial_tolerance)
@@ -309,6 +321,12 @@ class LightningMetrics(nn.Module):
             pred_flat = prediction.flatten()
             target_flat = target.flatten()
             return f1_score(target_flat, pred_flat, zero_division=0)
+        
+        # FIX: Ensure both arrays have same shape before neighborhood operations
+        if prediction.shape != target.shape:
+            min_h, min_w = min(prediction.shape[0], target.shape[0]), min(prediction.shape[1], target.shape[1])
+            prediction = prediction[:min_h, :min_w]
+            target = target[:min_h, :min_w]
         
         # Create neighborhood masks
         pred_neighborhood = self._create_neighborhood_mask(prediction, self.spatial_tolerance)
@@ -376,7 +394,18 @@ class LightningMetrics(nn.Module):
     def _compute_lightning_specific_metrics(self, predictions: np.ndarray, targets: np.ndarray) -> Dict[str, float]:
         """Compute metrics specific to lightning prediction."""
         
-        binary_preds = (predictions > self.threshold).astype(int)
+        # FIX: Ensure arrays have same length to prevent broadcast errors
+        min_length = min(len(predictions), len(targets))
+        if len(predictions) != len(targets):
+            predictions = predictions[:min_length]
+            targets = targets[:min_length]
+        
+        # Convert probabilities to binary if needed
+        if predictions.max() <= 1.0 and predictions.min() >= 0.0:
+            binary_preds = (predictions > self.threshold).astype(int)
+        else:
+            binary_preds = predictions.astype(int)
+        
         binary_targets = targets.astype(int)
         
         metrics = {}

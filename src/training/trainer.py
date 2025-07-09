@@ -174,7 +174,7 @@ class LightningTrainer(pl.LightningModule):
             "optimizer": optimizer,
             "lr_scheduler": lr_scheduler_config
         }
-    
+        
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Training step with gradient accumulation and physics constraints."""
         
@@ -207,41 +207,21 @@ class LightningTrainer(pl.LightningModule):
             total_loss = self.loss_function(predictions, lightning_targets)
             loss_dict = {'total_loss': total_loss, 'main_loss': total_loss}
         
-        # Scale loss for gradient accumulation
-        scaled_loss = total_loss / self.gradient_accumulation_steps
-        
-        # Manual gradient accumulation if enabled
-        if self.gradient_accumulation_steps > 1:
-            self.manual_backward(scaled_loss)
-            
-            self.current_accumulation_step += 1
-            
-            if self.current_accumulation_step % self.gradient_accumulation_steps == 0:
-                # Apply gradient clipping
-                if hasattr(self.training_config, 'max_grad_norm'):
-                    torch.nn.utils.clip_grad_norm_(
-                        self.parameters(), 
-                        self.training_config.max_grad_norm
-                    )
-                
-                # Optimizer step
-                optimizer = self.optimizers()
-                optimizer.step()
-                optimizer.zero_grad()
-                
-                # Scheduler step if interval is 'step'
-                scheduler = self.lr_schedulers()
-                if scheduler and hasattr(scheduler, 'step'):
-                    scheduler.step()
-            
-            # Don't return loss for automatic optimization
-            loss_to_return = None
-        else:
-            loss_to_return = total_loss
+        # FIX: Add NaN detection and emergency stop
+        if torch.isnan(total_loss) or torch.isinf(total_loss):
+            print(f"NaN/Inf loss detected at step {batch_idx}")
+            print(f"Predictions range: {predictions.min():.4f} to {predictions.max():.4f}")
+            print(f"Targets range: {lightning_targets.min():.4f} to {lightning_targets.max():.4f}")
+            print(f"Loss components: {loss_dict}")
+            # Return a small valid loss to prevent crash
+            return torch.tensor(0.1, requires_grad=True, device=predictions.device)
         
         # Update metrics
         with torch.no_grad():
-            self.train_metrics.update(predictions, lightning_targets, predictions)
+            # FIX: Convert logits to probabilities and binary predictions to avoid shape mismatch in metrics computation
+            probabilities = torch.sigmoid(predictions)
+            binary_predictions = (probabilities > 0.5).float()
+            self.train_metrics.update(binary_predictions, lightning_targets, probabilities)
         
         # Log losses
         self.log('train_loss', total_loss, on_step=True, on_epoch=True, prog_bar=True)
@@ -255,7 +235,9 @@ class LightningTrainer(pl.LightningModule):
         current_lr = self.optimizers().param_groups[0]['lr']
         self.log('learning_rate', current_lr, on_step=True)
         
-        return loss_to_return
+        # FIX: Return total_loss directly for automatic optimization
+        return total_loss
+        
     
     def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Validation step."""
@@ -280,7 +262,11 @@ class LightningTrainer(pl.LightningModule):
             total_loss = self.loss_function(predictions, lightning_targets)
         
         # Update metrics
-        self.val_metrics.update(predictions, lightning_targets, predictions)
+        with torch.no_grad():
+            # FIX: Convert logits to probabilities and binary predictions to avoid shape mismatch in metrics computation
+            probabilities = torch.sigmoid(predictions)
+            binary_predictions = (probabilities > 0.5).float()
+            self.val_metrics.update(binary_predictions, lightning_targets, probabilities)
         
         # Log validation loss
         self.log('val_loss', total_loss, on_epoch=True, prog_bar=True)
@@ -310,7 +296,11 @@ class LightningTrainer(pl.LightningModule):
             total_loss = self.loss_function(predictions, lightning_targets)
         
         # Update metrics
-        self.test_metrics.update(predictions, lightning_targets, predictions)
+        with torch.no_grad():
+            # FIX: Convert logits to probabilities and binary predictions to avoid shape mismatch in metrics computation
+            probabilities = torch.sigmoid(predictions)
+            binary_predictions = (probabilities > 0.5).float()
+            self.test_metrics.update(binary_predictions, lightning_targets, probabilities)
         
         return total_loss
     

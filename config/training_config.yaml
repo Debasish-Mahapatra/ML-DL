@@ -12,7 +12,7 @@ training:
   # Optimizer
   optimizer:
     type: "AdamW"
-    lr: 1e-4
+    lr: 1e-5  # FIX: Reduce learning rate from 1e-4 to 1e-5 to prevent NaN loss
     weight_decay: 1e-5
     
   # Scheduler
@@ -22,22 +22,24 @@ training:
     T_mult: 2
     eta_min: 1e-6
     
-  # Loss
+# Loss
   loss:
     type: "composite"
-    primary: "focal"  # FIX: Change from "focal_loss" to "focal"
-    physics_weight: 0.1
-    charge_separation_weight: 0.05
-    microphysics_weight: 0.05
-    terrain_consistency_weight: 0.02
+    primary: "focal"
+    physics_weight: 0.02
+    charge_separation_weight: 0.01
+    microphysics_weight: 0.01  # FIX: Enable with low weight (will be zero without temperature data)
+    terrain_consistency_weight: 0.005
+    adaptive_weights: true  # FIX: Enable adaptive tuning
+    adaptive_weighting: true  # FIX: Enable adaptive main/physics balance
     
   # Hardware
   accelerator: "gpu"
   devices: 1
-  precision: 16
+  precision: 32
   
   # Memory Optimization
-  gradient_accumulation_steps: 8  # FIX: Increase from 4 to 8 to compensate for smaller batch
+  gradient_accumulation_steps: 16  # FIX: Increase from 4 to 8 to compensate for smaller batch
   max_grad_norm: 1.0
   
   # Reproducibility

@@ -41,16 +41,16 @@ model:
   # Core Processing
   gnn:
     type: "GraphAttentionNetwork"
-    hidden_dim: 128  # FIX: Reduce from 256 to 128
-    num_layers: 2    # FIX: Reduce from 3 to 2
-    num_heads: 4     # FIX: Reduce from 8 to 4
+    hidden_dim: 64  # FIX: Reduce from 128 to 64 to save GPU memory
+    num_layers: 2    # Keep at 2
+    num_heads: 4     # Keep at 4
     dropout: 0.1
     
   transformer:
     type: "LightweightTransformer"
-    hidden_dim: 128  # FIX: Reduce from 256 to 128 to match GNN
-    num_layers: 4
-    num_heads: 8
+    hidden_dim: 64  # FIX: Reduce from 128 to 64 to save GPU memory
+    num_layers: 3   # FIX: Reduce from 4 to 3
+    num_heads: 4    # FIX: Reduce from 8 to 4
     dropout: 0.1
     attention_type: "linear"
     

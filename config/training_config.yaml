@@ -1,0 +1,60 @@
+# Training Configuration
+training:
+  # Experiment
+  experiment_name: "cape_only_v1"
+  project_name: "lightning_prediction"
+  
+  # Training Parameters
+  max_epochs: 100
+  patience: 15
+  min_delta: 1e-4
+  
+  # Optimizer
+  optimizer:
+    type: "AdamW"
+    lr: 1e-4
+    weight_decay: 1e-5
+    
+  # Scheduler
+  scheduler:
+    type: "CosineAnnealingWarmRestarts"
+    T_0: 50
+    T_mult: 2
+    eta_min: 1e-6
+    
+  # Loss
+  loss:
+    type: "composite"
+    primary: "focal_loss"
+    physics_weight: 0.1
+    charge_separation_weight: 0.05
+    microphysics_weight: 0.05
+    terrain_consistency_weight: 0.02
+    
+  # Hardware
+  accelerator: "gpu"
+  devices: 1
+  precision: 16
+  
+  # Memory Optimization
+  gradient_accumulation_steps: 4
+  max_grad_norm: 1.0
+  
+  # Reproducibility
+  seed: 42
+  deterministic: true
+  
+  # Logging
+  log_every_n_steps: 50
+  val_check_interval: 1.0
+  
+  # Checkpointing
+  save_top_k: 3
+  save_last: true
+  monitor: "val_f1_score"
+  mode: "max"
+  
+  # Domain Adaptation
+  domain_adaptation:
+    enabled: true
+    adaptation_layers: ["terrain", "meteorological"]

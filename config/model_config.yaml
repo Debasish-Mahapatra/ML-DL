@@ -1,0 +1,67 @@
+# Model Configuration
+model:
+  name: "LightningPredictor"
+  
+  # Architecture Components
+  encoders:
+    cape:
+      type: "CNN2D"
+      channels: [32, 64, 128, 256]
+      kernel_sizes: [7, 5, 3, 3]
+      activation: "relu"
+      dropout: 0.1
+      
+    era5:
+      type: "CNN3D"
+      in_channels: 9
+      pressure_levels: 7
+      channels: [32, 64, 128, 256]
+      kernel_sizes: [3, 3, 3, 3]
+      activation: "relu"
+      dropout: 0.1
+      
+    terrain:
+      type: "TerrainEncoder"
+      embedding_dim: 64
+      learnable_downsample: true
+      downsample_method: "learned_conv"
+      
+  # Fusion Components
+  fusion:
+    meteorological:
+      type: "FeatureFusion"
+      fusion_method: "concatenation"
+      hidden_dim: 512
+      
+    multiscale:
+      type: "TerrainGuidedUpsampling"
+      upsampling_factor: 8.33
+      guidance_weight: 0.3
+      
+  # Core Processing
+  gnn:
+    type: "GraphAttentionNetwork"
+    hidden_dim: 256
+    num_layers: 3
+    num_heads: 8
+    dropout: 0.1
+    
+  transformer:
+    type: "LightweightTransformer"
+    hidden_dim: 256
+    num_layers: 4
+    num_heads: 8
+    dropout: 0.1
+    attention_type: "linear"
+    
+  # Output Head
+  prediction_head:
+    hidden_dim: 128
+    output_dim: 1
+    activation: "sigmoid"
+    
+  # Domain Adaptation
+  domain_adapter:
+    terrain_adaptation_dim: 64
+    meteorological_adaptation_dim: 32
+    dropout: 0.1

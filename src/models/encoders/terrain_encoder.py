@@ -79,23 +79,26 @@ class TerrainEncoder(nn.Module):
     
     def _compute_terrain_gradients(self, terrain_features: torch.Tensor) -> torch.Tensor:
         """Compute terrain gradients for enhanced features."""
+        # Get the actual number of channels from the tensor
+        num_channels = terrain_features.shape[1]
+    
         # Sobel filters for gradient computation
         sobel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], 
                               dtype=torch.float32, device=terrain_features.device)
         sobel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], 
                               dtype=torch.float32, device=terrain_features.device)
-        
-        # Reshape for convolution
-        sobel_x = sobel_x.view(1, 1, 3, 3).repeat(self.embedding_dim, 1, 1, 1)
-        sobel_y = sobel_y.view(1, 1, 3, 3).repeat(self.embedding_dim, 1, 1, 1)
-        
-        # Compute gradients
-        grad_x = F.conv2d(terrain_features, sobel_x, padding=1, groups=self.embedding_dim)
-        grad_y = F.conv2d(terrain_features, sobel_y, padding=1, groups=self.embedding_dim)
-        
+    
+        # Reshape for grouped convolution - one filter per channel
+        sobel_x = sobel_x.view(1, 1, 3, 3).repeat(num_channels, 1, 1, 1)
+        sobel_y = sobel_y.view(1, 1, 3, 3).repeat(num_channels, 1, 1, 1)
+    
+        # Compute gradients using grouped convolution
+        grad_x = F.conv2d(terrain_features, sobel_x, padding=1, groups=num_channels)
+        grad_y = F.conv2d(terrain_features, sobel_y, padding=1, groups=num_channels)
+    
         # Gradient magnitude
         grad_magnitude = torch.sqrt(grad_x**2 + grad_y**2 + 1e-6)
-        
+    
         return grad_magnitude
     
     def forward(self, x: torch.Tensor, target_size: Tuple[int, int]) -> torch.Tensor:

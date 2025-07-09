@@ -110,7 +110,7 @@ class LightningPredictor(nn.Module):
         self.multiscale_fusion = MultiScaleFusion(
             met_channels=fusion_config.meteorological.hidden_dim,
             terrain_channels=self.terrain_encoder.embedding_dim,
-            output_channels=fusion_config.multiscale.upsampling_factor,  # Will be corrected
+            output_channels=fusion_config.meteorological.hidden_dim,  # Use same as met_channels 
             upsampling_factor=8.33,  # 25km → 3km
             fusion_method="terrain_guided"
         )

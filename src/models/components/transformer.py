@@ -389,9 +389,17 @@ class LocalPatternExtractor(nn.Module):
     def __init__(self, hidden_dim: int):
         super().__init__()
         
+        # Ensure groups is valid for grouped convolution
+        groups = min(hidden_dim // 4, hidden_dim)
+        groups = max(groups, 1)  # Ensure at least 1 group
+        
+        # Make sure hidden_dim is divisible by groups
+        while hidden_dim % groups != 0 and groups > 1:
+            groups -= 1
+        
         # Local pattern detection
         self.local_conv = nn.Sequential(
-            nn.Conv2d(hidden_dim, hidden_dim, 3, padding=1, groups=hidden_dim//4),
+            nn.Conv2d(hidden_dim, hidden_dim, 3, padding=1, groups=groups),
             nn.BatchNorm2d(hidden_dim),
             nn.ReLU(inplace=True),
             nn.Conv2d(hidden_dim, hidden_dim, 1)

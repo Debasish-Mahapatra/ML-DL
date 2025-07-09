@@ -14,279 +14,80 @@ Tensorboard is available. To monitor training, run:
 
 Log locations:
   Training logs: logs/
-  Experiment logs: experiments/lightning_cape_seasonal_20250703_181636/logs/
-  Checkpoints: experiments/lightning_cape_seasonal_20250703_181636/checkpoints/
-[0;34m==== Preprocessing Raw Data ====[0m
-Input files:
-  Lightning directory: /mnt/scratch/lightning_prediction/data/input-LP/observed_lightning/
-  CAPE file: /mnt/scratch/lightning_prediction/data/input-LP/cape/cape-2019-2022.nc
-  Terrain file: /mnt/scratch/lightning_prediction/data/input-LP/terrain/terrain_lonlat.nc
-  Domain bounds: 81.1644 87.52883 17.76351 22.62838
-
-2025-07-03 18:16:36,815 - __main__ - INFO - Starting preprocessing...
-2025-07-03 18:16:36,815 - __main__ - INFO - Domain: [81.1644, 87.52883, 17.76351, 22.62838]
-2025-07-03 18:16:36,815 - __main__ - INFO - Output directory: data/processed
-2025-07-03 18:16:36,815 - __main__ - INFO - Processing lightning data...
-2025-07-03 18:16:36,815 - __main__ - INFO - Found 4 lightning files
-2025-07-03 18:16:36,815 - __main__ - INFO - Processing 2022_odisha_lightning_3km_hourly_grid.nc
-2025-07-03 18:16:36,834 - __main__ - INFO - Using coordinates: latitude, longitude
-2025-07-03 18:16:36,834 - __main__ - INFO - Data coordinate ranges:
-2025-07-03 18:16:36,834 - __main__ - INFO -   longitude: 81.1644 to 87.5288
-2025-07-03 18:16:36,834 - __main__ - INFO -   latitude: 17.7635 to 22.6284
-2025-07-03 18:16:36,834 - __main__ - INFO - Target domain: lon 81.1644 to 87.5288, lat 17.7635 to 22.6284
-2025-07-03 18:16:36,840 - __main__ - INFO - Cropped from Frozen({'time': 8760, 'latitude': 181, 'longitude': 222}) to Frozen({'time': 8760, 'latitude': 181, 'longitude': 221})
-2025-07-03 18:16:36,840 - __main__ - INFO - Using lightning variable: flash_count
-2025-07-03 18:16:37,176 - __main__ - INFO - Saved data/processed/lightning/2022/lightning_2022_01.nc with 744 time steps
-2025-07-03 18:16:37,454 - __main__ - INFO - Saved data/processed/lightning/2022/lightning_2022_02.nc with 672 time steps
-2025-07-03 18:16:37,734 - __main__ - INFO - Saved data/processed/lightning/2022/lightning_2022_03.nc with 744 time steps
-2025-07-03 18:16:38,114 - __main__ - INFO - Saved data/processed/lightning/2022/lightning_2022_04.nc with 720 time steps
-2025-07-03 18:16:38,583 - __main__ - INFO - Saved data/processed/lightning/2022/lightning_2022_05.nc with 744 time steps
-2025-07-03 18:16:39,094 - __main__ - INFO - Saved data/processed/lightning/2022/lightning_2022_06.nc with 720 time steps
-2025-07-03 18:16:39,652 - __main__ - INFO - Saved data/processed/lightning/2022/lightning_2022_07.nc with 744 time steps
-2025-07-03 18:16:40,180 - __main__ - INFO - Saved data/processed/lightning/2022/lightning_2022_08.nc with 744 time steps
-2025-07-03 18:16:40,651 - __main__ - INFO - Saved data/processed/lightning/2022/lightning_2022_09.nc with 720 time steps
-2025-07-03 18:16:41,067 - __main__ - INFO - Saved data/processed/lightning/2022/lightning_2022_10.nc with 744 time steps
-2025-07-03 18:16:41,332 - __main__ - INFO - Saved data/processed/lightning/2022/lightning_2022_11.nc with 720 time steps
-2025-07-03 18:16:41,592 - __main__ - INFO - Saved data/processed/lightning/2022/lightning_2022_12.nc with 744 time steps
-2025-07-03 18:16:41,592 - __main__ - INFO - Processing 2021_odisha_lightning_3km_hourly_grid.nc
-2025-07-03 18:16:41,611 - __main__ - INFO - Using coordinates: latitude, longitude
-2025-07-03 18:16:41,612 - __main__ - INFO - Data coordinate ranges:
-2025-07-03 18:16:41,612 - __main__ - INFO -   longitude: 81.1644 to 87.5288
-2025-07-03 18:16:41,612 - __main__ - INFO -   latitude: 17.7635 to 22.6284
-2025-07-03 18:16:41,612 - __main__ - INFO - Target domain: lon 81.1644 to 87.5288, lat 17.7635 to 22.6284
-2025-07-03 18:16:41,612 - __main__ - INFO - Cropped from Frozen({'time': 8760, 'latitude': 181, 'longitude': 222}) to Frozen({'time': 8760, 'latitude': 181, 'longitude': 221})
-2025-07-03 18:16:41,612 - __main__ - INFO - Using lightning variable: flash_count
-2025-07-03 18:16:41,871 - __main__ - INFO - Saved data/processed/lightning/2021/lightning_2021_01.nc with 744 time steps
-2025-07-03 18:16:42,129 - __main__ - INFO - Saved data/processed/lightning/2021/lightning_2021_02.nc with 672 time steps
-2025-07-03 18:16:42,440 - __main__ - INFO - Saved data/processed/lightning/2021/lightning_2021_03.nc with 744 time steps
-2025-07-03 18:16:42,854 - __main__ - INFO - Saved data/processed/lightning/2021/lightning_2021_04.nc with 720 time steps
-2025-07-03 18:16:43,342 - __main__ - INFO - Saved data/processed/lightning/2021/lightning_2021_05.nc with 744 time steps
-2025-07-03 18:16:43,836 - __main__ - INFO - Saved data/processed/lightning/2021/lightning_2021_06.nc with 720 time steps
-2025-07-03 18:16:44,276 - __main__ - INFO - Saved data/processed/lightning/2021/lightning_2021_07.nc with 744 time steps
-2025-07-03 18:16:44,746 - __main__ - INFO - Saved data/processed/lightning/2021/lightning_2021_08.nc with 744 time steps
-2025-07-03 18:16:45,312 - __main__ - INFO - Saved data/processed/lightning/2021/lightning_2021_09.nc with 720 time steps
-2025-07-03 18:16:45,754 - __main__ - INFO - Saved data/processed/lightning/2021/lightning_2021_10.nc with 744 time steps
-2025-07-03 18:16:46,002 - __main__ - INFO - Saved data/processed/lightning/2021/lightning_2021_11.nc with 720 time steps
-2025-07-03 18:16:46,290 - __main__ - INFO - Saved data/processed/lightning/2021/lightning_2021_12.nc with 744 time steps
-2025-07-03 18:16:46,291 - __main__ - INFO - Processing 2019_odisha_lightning_3km_hourly_grid.nc
-2025-07-03 18:16:46,301 - __main__ - INFO - Using coordinates: latitude, longitude
-2025-07-03 18:16:46,301 - __main__ - INFO - Data coordinate ranges:
-2025-07-03 18:16:46,301 - __main__ - INFO -   longitude: 81.1644 to 87.5288
-2025-07-03 18:16:46,301 - __main__ - INFO -   latitude: 17.7635 to 22.6284
-2025-07-03 18:16:46,301 - __main__ - INFO - Target domain: lon 81.1644 to 87.5288, lat 17.7635 to 22.6284
-2025-07-03 18:16:46,301 - __main__ - INFO - Cropped from Frozen({'time': 8760, 'latitude': 181, 'longitude': 222}) to Frozen({'time': 8760, 'latitude': 181, 'longitude': 221})
-2025-07-03 18:16:46,301 - __main__ - INFO - Using lightning variable: flash_count
-2025-07-03 18:16:46,588 - __main__ - INFO - Saved data/processed/lightning/2019/lightning_2019_01.nc with 744 time steps
-2025-07-03 18:16:46,879 - __main__ - INFO - Saved data/processed/lightning/2019/lightning_2019_02.nc with 672 time steps
-2025-07-03 18:16:47,211 - __main__ - INFO - Saved data/processed/lightning/2019/lightning_2019_03.nc with 744 time steps
-2025-07-03 18:16:47,620 - __main__ - INFO - Saved data/processed/lightning/2019/lightning_2019_04.nc with 720 time steps
-2025-07-03 18:16:48,047 - __main__ - INFO - Saved data/processed/lightning/2019/lightning_2019_05.nc with 744 time steps
-2025-07-03 18:16:48,571 - __main__ - INFO - Saved data/processed/lightning/2019/lightning_2019_06.nc with 720 time steps
-2025-07-03 18:16:49,003 - __main__ - INFO - Saved data/processed/lightning/2019/lightning_2019_07.nc with 744 time steps
-2025-07-03 18:16:49,515 - __main__ - INFO - Saved data/processed/lightning/2019/lightning_2019_08.nc with 744 time steps
-2025-07-03 18:16:51,006 - __main__ - INFO - Saved data/processed/lightning/2019/lightning_2019_09.nc with 720 time steps
-2025-07-03 18:16:53,059 - __main__ - INFO - Saved data/processed/lightning/2019/lightning_2019_10.nc with 744 time steps
-2025-07-03 18:16:54,542 - __main__ - INFO - Saved data/processed/lightning/2019/lightning_2019_11.nc with 720 time steps
-2025-07-03 18:16:56,386 - __main__ - INFO - Saved data/processed/lightning/2019/lightning_2019_12.nc with 744 time steps
-2025-07-03 18:16:56,386 - __main__ - INFO - Processing 2020_odisha_lightning_3km_hourly_grid.nc
-2025-07-03 18:16:56,403 - __main__ - INFO - Using coordinates: latitude, longitude
-2025-07-03 18:16:56,403 - __main__ - INFO - Data coordinate ranges:
-2025-07-03 18:16:56,403 - __main__ - INFO -   longitude: 81.1644 to 87.5288
-2025-07-03 18:16:56,404 - __main__ - INFO -   latitude: 17.7635 to 22.6284
-2025-07-03 18:16:56,404 - __main__ - INFO - Target domain: lon 81.1644 to 87.5288, lat 17.7635 to 22.6284
-2025-07-03 18:16:56,404 - __main__ - INFO - Cropped from Frozen({'time': 8784, 'latitude': 181, 'longitude': 222}) to Frozen({'time': 8784, 'latitude': 181, 'longitude': 221})
-2025-07-03 18:16:56,404 - __main__ - INFO - Using lightning variable: flash_count
-2025-07-03 18:16:58,625 - __main__ - INFO - Saved data/processed/lightning/2020/lightning_2020_01.nc with 744 time steps
-2025-07-03 18:17:00,784 - __main__ - INFO - Saved data/processed/lightning/2020/lightning_2020_02.nc with 696 time steps
-2025-07-03 18:17:03,383 - __main__ - INFO - Saved data/processed/lightning/2020/lightning_2020_03.nc with 744 time steps
-2025-07-03 18:17:05,576 - __main__ - INFO - Saved data/processed/lightning/2020/lightning_2020_04.nc with 720 time steps
-2025-07-03 18:17:07,956 - __main__ - INFO - Saved data/processed/lightning/2020/lightning_2020_05.nc with 744 time steps
-2025-07-03 18:17:10,325 - __main__ - INFO - Saved data/processed/lightning/2020/lightning_2020_06.nc with 720 time steps
-2025-07-03 18:17:11,131 - __main__ - INFO - Saved data/processed/lightning/2020/lightning_2020_07.nc with 744 time steps
-2025-07-03 18:17:12,937 - __main__ - INFO - Saved data/processed/lightning/2020/lightning_2020_08.nc with 744 time steps
-2025-07-03 18:17:15,569 - __main__ - INFO - Saved data/processed/lightning/2020/lightning_2020_09.nc with 720 time steps
-2025-07-03 18:17:17,837 - __main__ - INFO - Saved data/processed/lightning/2020/lightning_2020_10.nc with 744 time steps
-2025-07-03 18:17:20,301 - __main__ - INFO - Saved data/processed/lightning/2020/lightning_2020_11.nc with 720 time steps
-2025-07-03 18:17:22,633 - __main__ - INFO - Saved data/processed/lightning/2020/lightning_2020_12.nc with 744 time steps
-2025-07-03 18:17:22,633 - __main__ - INFO - Processing CAPE data...
-2025-07-03 18:17:22,633 - __main__ - INFO - Processing CAPE data from /mnt/scratch/lightning_prediction/data/input-LP/cape/cape-2019-2022.nc
-2025-07-03 18:17:30,514 - __main__ - INFO - Original CAPE dataset: Frozen({'time': 35064, 'lon': 1440, 'lat': 721})
-2025-07-03 18:17:30,514 - __main__ - INFO - Variables: ['cape']
-2025-07-03 18:17:30,514 - __main__ - INFO - Using coordinates: lat, lon
-2025-07-03 18:17:30,514 - __main__ - INFO - Data coordinate ranges:
-2025-07-03 18:17:30,514 - __main__ - INFO -   lon: 0.0000 to 359.7500
-2025-07-03 18:17:30,514 - __main__ - INFO -   lat: -90.0000 to 90.0000
-2025-07-03 18:17:30,514 - __main__ - INFO - Target domain: lon 81.1644 to 87.5288, lat 17.7635 to 22.6284
-2025-07-03 18:17:30,514 - __main__ - INFO - Converted longitude bounds to: 81.1644 to 87.5288
-2025-07-03 18:17:30,514 - __main__ - INFO - Latitude coordinates are decreasing - will handle appropriately
-2025-07-03 18:17:30,514 - __main__ - INFO - Cropped from Frozen({'time': 35064, 'lon': 1440, 'lat': 721}) to Frozen({'time': 35064, 'lon': 26, 'lat': 19})
-2025-07-03 18:17:30,515 - __main__ - INFO - Using CAPE variable: cape
-2025-07-03 18:17:30,525 - __main__ - INFO - Processing years: [2019 2020 2021 2022]
-2025-07-03 18:17:30,525 - __main__ - INFO - Processing year 2019
-2025-07-03 18:17:31,360 - __main__ - INFO - Saved data/processed/meteorological/cape/2019/cape_2019_01.nc with 744 time steps
-2025-07-03 18:17:32,009 - __main__ - INFO - Saved data/processed/meteorological/cape/2019/cape_2019_02.nc with 672 time steps
-2025-07-03 18:17:32,463 - __main__ - INFO - Saved data/processed/meteorological/cape/2019/cape_2019_03.nc with 744 time steps
-2025-07-03 18:17:32,823 - __main__ - INFO - Saved data/processed/meteorological/cape/2019/cape_2019_04.nc with 720 time steps
-2025-07-03 18:17:33,196 - __main__ - INFO - Saved data/processed/meteorological/cape/2019/cape_2019_05.nc with 744 time steps
-2025-07-03 18:17:33,545 - __main__ - INFO - Saved data/processed/meteorological/cape/2019/cape_2019_06.nc with 720 time steps
-2025-07-03 18:17:34,060 - __main__ - INFO - Saved data/processed/meteorological/cape/2019/cape_2019_07.nc with 744 time steps
-2025-07-03 18:17:34,505 - __main__ - INFO - Saved data/processed/meteorological/cape/2019/cape_2019_08.nc with 744 time steps
-2025-07-03 18:17:34,939 - __main__ - INFO - Saved data/processed/meteorological/cape/2019/cape_2019_09.nc with 720 time steps
-2025-07-03 18:17:35,236 - __main__ - INFO - Saved data/processed/meteorological/cape/2019/cape_2019_10.nc with 744 time steps
-2025-07-03 18:17:36,029 - __main__ - INFO - Saved data/processed/meteorological/cape/2019/cape_2019_11.nc with 720 time steps
-2025-07-03 18:17:36,402 - __main__ - INFO - Saved data/processed/meteorological/cape/2019/cape_2019_12.nc with 744 time steps
-2025-07-03 18:17:36,402 - __main__ - INFO - Processing year 2020
-2025-07-03 18:17:37,075 - __main__ - INFO - Saved data/processed/meteorological/cape/2020/cape_2020_01.nc with 744 time steps
-2025-07-03 18:17:37,574 - __main__ - INFO - Saved data/processed/meteorological/cape/2020/cape_2020_02.nc with 696 time steps
-2025-07-03 18:17:38,017 - __main__ - INFO - Saved data/processed/meteorological/cape/2020/cape_2020_03.nc with 744 time steps
-2025-07-03 18:17:38,334 - __main__ - INFO - Saved data/processed/meteorological/cape/2020/cape_2020_04.nc with 720 time steps
-2025-07-03 18:17:38,732 - __main__ - INFO - Saved data/processed/meteorological/cape/2020/cape_2020_05.nc with 744 time steps
-2025-07-03 18:17:39,035 - __main__ - INFO - Saved data/processed/meteorological/cape/2020/cape_2020_06.nc with 720 time steps
-2025-07-03 18:17:39,593 - __main__ - INFO - Saved data/processed/meteorological/cape/2020/cape_2020_07.nc with 744 time steps
-2025-07-03 18:17:39,977 - __main__ - INFO - Saved data/processed/meteorological/cape/2020/cape_2020_08.nc with 744 time steps
-2025-07-03 18:17:40,582 - __main__ - INFO - Saved data/processed/meteorological/cape/2020/cape_2020_09.nc with 720 time steps
-2025-07-03 18:17:41,497 - __main__ - INFO - Saved data/processed/meteorological/cape/2020/cape_2020_10.nc with 744 time steps
-2025-07-03 18:17:42,389 - __main__ - INFO - Saved data/processed/meteorological/cape/2020/cape_2020_11.nc with 720 time steps
-2025-07-03 18:17:43,311 - __main__ - INFO - Saved data/processed/meteorological/cape/2020/cape_2020_12.nc with 744 time steps
-2025-07-03 18:17:43,311 - __main__ - INFO - Processing year 2021
-2025-07-03 18:17:44,223 - __main__ - INFO - Saved data/processed/meteorological/cape/2021/cape_2021_01.nc with 744 time steps
-2025-07-03 18:17:45,064 - __main__ - INFO - Saved data/processed/meteorological/cape/2021/cape_2021_02.nc with 672 time steps
-2025-07-03 18:17:45,990 - __main__ - INFO - Saved data/processed/meteorological/cape/2021/cape_2021_03.nc with 744 time steps
-2025-07-03 18:17:46,893 - __main__ - INFO - Saved data/processed/meteorological/cape/2021/cape_2021_04.nc with 720 time steps
-2025-07-03 18:17:47,800 - __main__ - INFO - Saved data/processed/meteorological/cape/2021/cape_2021_05.nc with 744 time steps
-2025-07-03 18:17:48,695 - __main__ - INFO - Saved data/processed/meteorological/cape/2021/cape_2021_06.nc with 720 time steps
-2025-07-03 18:17:49,622 - __main__ - INFO - Saved data/processed/meteorological/cape/2021/cape_2021_07.nc with 744 time steps
-2025-07-03 18:17:50,544 - __main__ - INFO - Saved data/processed/meteorological/cape/2021/cape_2021_08.nc with 744 time steps
-2025-07-03 18:17:51,435 - __main__ - INFO - Saved data/processed/meteorological/cape/2021/cape_2021_09.nc with 720 time steps
-2025-07-03 18:17:52,360 - __main__ - INFO - Saved data/processed/meteorological/cape/2021/cape_2021_10.nc with 744 time steps
-2025-07-03 18:17:53,346 - __main__ - INFO - Saved data/processed/meteorological/cape/2021/cape_2021_11.nc with 720 time steps
-2025-07-03 18:17:54,311 - __main__ - INFO - Saved data/processed/meteorological/cape/2021/cape_2021_12.nc with 744 time steps
-2025-07-03 18:17:54,311 - __main__ - INFO - Processing year 2022
-2025-07-03 18:17:55,236 - __main__ - INFO - Saved data/processed/meteorological/cape/2022/cape_2022_01.nc with 744 time steps
-2025-07-03 18:17:56,073 - __main__ - INFO - Saved data/processed/meteorological/cape/2022/cape_2022_02.nc with 672 time steps
-2025-07-03 18:17:56,989 - __main__ - INFO - Saved data/processed/meteorological/cape/2022/cape_2022_03.nc with 744 time steps
-2025-07-03 18:17:57,881 - __main__ - INFO - Saved data/processed/meteorological/cape/2022/cape_2022_04.nc with 720 time steps
-2025-07-03 18:17:58,807 - __main__ - INFO - Saved data/processed/meteorological/cape/2022/cape_2022_05.nc with 744 time steps
-2025-07-03 18:17:59,693 - __main__ - INFO - Saved data/processed/meteorological/cape/2022/cape_2022_06.nc with 720 time steps
-2025-07-03 18:18:00,611 - __main__ - INFO - Saved data/processed/meteorological/cape/2022/cape_2022_07.nc with 744 time steps
-2025-07-03 18:18:01,534 - __main__ - INFO - Saved data/processed/meteorological/cape/2022/cape_2022_08.nc with 744 time steps
-2025-07-03 18:18:02,434 - __main__ - INFO - Saved data/processed/meteorological/cape/2022/cape_2022_09.nc with 720 time steps
-2025-07-03 18:18:03,358 - __main__ - INFO - Saved data/processed/meteorological/cape/2022/cape_2022_10.nc with 744 time steps
-2025-07-03 18:18:04,253 - __main__ - INFO - Saved data/processed/meteorological/cape/2022/cape_2022_11.nc with 720 time steps
-2025-07-03 18:18:05,182 - __main__ - INFO - Saved data/processed/meteorological/cape/2022/cape_2022_12.nc with 744 time steps
-2025-07-03 18:18:05,182 - __main__ - INFO - Processing terrain data...
-2025-07-03 18:18:05,183 - __main__ - INFO - Processing terrain data from /mnt/scratch/lightning_prediction/data/input-LP/terrain/terrain_lonlat.nc
-2025-07-03 18:18:05,192 - __main__ - INFO - Original terrain dataset: Frozen({'lon': 4147, 'lat': 4336})
-2025-07-03 18:18:05,192 - __main__ - INFO - Variables: ['elevation']
-2025-07-03 18:18:05,192 - __main__ - INFO - Using coordinates: lat, lon
-2025-07-03 18:18:05,192 - __main__ - INFO - Data coordinate ranges:
-2025-07-03 18:18:05,192 - __main__ - INFO -   lon: 61.9588 to 101.9472
-2025-07-03 18:18:05,192 - __main__ - INFO -   lat: 1.6803 to 39.8316
-2025-07-03 18:18:05,192 - __main__ - INFO - Target domain: lon 81.1644 to 87.5288, lat 17.7635 to 22.6284
-2025-07-03 18:18:05,192 - __main__ - INFO - Cropped from Frozen({'lon': 4147, 'lat': 4336}) to Frozen({'lon': 660, 'lat': 553})
-2025-07-03 18:18:05,192 - __main__ - INFO - Using elevation variable: elevation
-2025-07-03 18:18:05,192 - __main__ - INFO - Interpolating terrain to match lightning grid from /mnt/scratch/lightning_prediction/data/input-LP/observed_lightning/2022_odisha_lightning_3km_hourly_grid.nc
-2025-07-03 18:18:05,200 - __main__ - INFO - Using coordinates: latitude, longitude
-2025-07-03 18:18:05,201 - __main__ - INFO - Data coordinate ranges:
-2025-07-03 18:18:05,201 - __main__ - INFO -   longitude: 81.1644 to 87.5288
-2025-07-03 18:18:05,201 - __main__ - INFO -   latitude: 17.7635 to 22.6284
-2025-07-03 18:18:05,201 - __main__ - INFO - Target domain: lon 81.1644 to 87.5288, lat 17.7635 to 22.6284
-2025-07-03 18:18:05,201 - __main__ - INFO - Cropped from Frozen({'time': 8760, 'latitude': 181, 'longitude': 222}) to Frozen({'time': 8760, 'latitude': 181, 'longitude': 221})
-2025-07-03 18:18:05,317 - __main__ - INFO - Saved terrain data to data/processed/terrain/terrain_odisha_1km.nc
-2025-07-03 18:18:05,317 - __main__ - INFO - Preprocessing completed successfully!
-2025-07-03 18:18:05,317 - __main__ - INFO - 
-Processed data structure:
-2025-07-03 18:18:05,317 - __main__ - INFO -   terrain: 1 files
-2025-07-03 18:18:05,318 - __main__ - INFO -   meteorological/cape/2020: 12 files
-2025-07-03 18:18:05,318 - __main__ - INFO -   meteorological/cape/2022: 12 files
-2025-07-03 18:18:05,318 - __main__ - INFO -   meteorological/cape/2021: 12 files
-2025-07-03 18:18:05,318 - __main__ - INFO -   meteorological/cape/2019: 12 files
-2025-07-03 18:18:05,318 - __main__ - INFO -   lightning/2020: 12 files
-2025-07-03 18:18:05,318 - __main__ - INFO -   lightning/2022: 12 files
-2025-07-03 18:18:05,318 - __main__ - INFO -   lightning/2021: 12 files
-2025-07-03 18:18:05,318 - __main__ - INFO -   lightning/2019: 12 files
-[0;32m✓ Data preprocessing completed[0m
-
-Processed data summary:
-  Total NetCDF files: 97
-  CAPE files: 48
-  Lightning files: 48
-  Terrain files: 1
-[0;34m==== Creating Seasonal-Aware Data Splits ====[0m
-Training years: 2019 2020 2021
-Split strategy: seasonal_aware
-
-2025-07-03 18:18:06,849 - __main__ - INFO - Validating data in data/processed
-2025-07-03 18:18:06,850 - __main__ - INFO - Found 48 CAPE files
-2025-07-03 18:18:06,850 - __main__ - INFO - Found 48 lightning files
-2025-07-03 18:18:06,850 - __main__ - INFO - Found 1 terrain files
-2025-07-03 18:18:07,416 - __main__ - INFO - Found 48 valid file pairs
-2025-07-03 18:18:07,416 - __main__ - INFO - Creating data splits...
-2025-07-03 18:18:07,416 - __main__ - INFO - Found 36 files from training years [2019, 2020, 2021]
-2025-07-03 18:18:07,416 - __main__ - INFO - Found 12 files from other years
-2025-07-03 18:18:07,416 - __main__ - INFO - Season DJF: 6 train, 1 val, 2 test files
-2025-07-03 18:18:07,416 - __main__ - INFO - Season MAM: 6 train, 1 val, 2 test files
-2025-07-03 18:18:07,416 - __main__ - INFO - Season JJA: 6 train, 1 val, 2 test files
-2025-07-03 18:18:07,416 - __main__ - INFO - Season SON: 6 train, 1 val, 2 test files
-2025-07-03 18:18:07,416 - __main__ - INFO - Total seasonal-aware split: Train=24, Val=4, Test=8
-2025-07-03 18:18:07,416 - __main__ - INFO - Train seasonal distribution: {'DJF': 6, 'MAM': 6, 'JJA': 6, 'SON': 6}
-2025-07-03 18:18:07,416 - __main__ - INFO - Val seasonal distribution: {'DJF': 1, 'MAM': 1, 'JJA': 1, 'SON': 1}
-2025-07-03 18:18:07,416 - __main__ - INFO - Test seasonal distribution: {'DJF': 2, 'MAM': 2, 'JJA': 2, 'SON': 2}
-2025-07-03 18:18:07,416 - __main__ - INFO - Saving split files...
-2025-07-03 18:18:07,417 - __main__ - INFO - Saved 24 entries to data/splits/train_files.txt
-2025-07-03 18:18:07,417 - __main__ - INFO - Saved 4 entries to data/splits/val_files.txt
-2025-07-03 18:18:07,417 - __main__ - INFO - Saved 8 entries to data/splits/test_files.txt
-2025-07-03 18:18:07,417 - __main__ - INFO - Saved 12 other year entries to data/splits/other_years_files.txt
-2025-07-03 18:18:07,417 - __main__ - INFO - Computing dataset statistics...
-2025-07-03 18:18:07,417 - src.data.preprocessing - INFO - Computing normalization statistics for cape
-2025-07-03 18:18:07,585 - src.data.preprocessing - INFO - cape normalization stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
-2025-07-03 18:18:07,587 - src.data.preprocessing - INFO - Computing normalization statistics for terrain
-2025-07-03 18:18:07,591 - src.data.preprocessing - INFO - terrain normalization stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
-2025-07-03 18:18:29,460 - __main__ - INFO - Dataset statistics computed:
-2025-07-03 18:18:29,463 - __main__ - INFO -   CAPE: mean=582.46, std=958.61
-2025-07-03 18:18:29,463 - __main__ - INFO -   Terrain: mean=248.56, std=252.46
-2025-07-03 18:18:29,463 - __main__ - INFO -   Lightning: 1553797 events, rate=0.005272
-2025-07-03 18:18:29,571 - __main__ - INFO - Saved dataset statistics to data/splits/dataset_statistics.yaml
-2025-07-03 18:18:29,573 - __main__ - INFO - Data preparation completed successfully
-2025-07-03 18:18:29,573 - __main__ - INFO - Summary saved to data/splits/preparation_summary.yaml
-[0;32m✓ Data splits created successfully[0m
-
-Data split summary:
-  Training files: 24
-  Validation files: 4
-  Test files: 8
-  Other years files (2022): 12
+  Experiment logs: experiments/lightning_cape_seasonal_20250709_114242/logs/
+  Checkpoints: experiments/lightning_cape_seasonal_20250709_114242/checkpoints/
+[1;33m⚠ Skipping data preprocessing[0m
 [0;34m==== Training Lightning Prediction Model ====[0m
-Experiment name: lightning_cape_seasonal_20250703_181636
+Experiment name: lightning_cape_seasonal_20250709_114242
 Configuration: config
 
 [0;32m✓ GPU detected - training will use CUDA[0m
 NVIDIA GeForce RTX 3070 Laptop GPU, 8192
 
 Seed set to 42
-2025-07-03 18:18:34,294 - __main__ - INFO - Loaded configuration from config
-2025-07-03 18:18:34,312 - __main__ - INFO - Configuration validation completed
-2025-07-03 18:18:34,312 - __main__ - INFO - Created directories for experiment: lightning_cape_seasonal_20250703_181636
-2025-07-03 18:18:34,318 - __main__ - INFO - Saved experiment configuration to experiments/lightning_cape_seasonal_20250703_181636/config.yaml
-2025-07-03 18:18:34,318 - __main__ - INFO - Initializing data module...
-2025-07-03 18:18:34,318 - src.data.data_loader - INFO - Setting up data for stage: fit
-2025-07-03 18:18:34,321 - src.data.data_loader - INFO - Loaded 24 train, 4 val, 8 test file pairs
-2025-07-03 18:18:34,321 - src.data.data_loader - INFO - Setting up data preprocessor...
-2025-07-03 18:18:34,321 - src.data.preprocessing - INFO - Computing normalization statistics for cape
-2025-07-03 18:18:34,528 - src.data.preprocessing - INFO - cape normalization stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
-2025-07-03 18:18:34,529 - src.data.preprocessing - INFO - Computing normalization statistics for terrain
-2025-07-03 18:18:34,536 - src.data.preprocessing - INFO - terrain normalization stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
-2025-07-03 18:18:34,536 - src.data.data_loader - INFO - CAPE stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
-2025-07-03 18:18:34,536 - src.data.data_loader - INFO - Terrain stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
-2025-07-03 18:18:34,536 - src.data.dataset - INFO - Building dataset sample index...
-2025-07-03 18:18:34,741 - src.data.dataset - INFO - Built dataset index with 17592 samples
-2025-07-03 18:18:34,741 - src.data.dataset - INFO - Building dataset sample index...
-2025-07-03 18:18:34,780 - src.data.dataset - INFO - Built dataset index with 2928 samples
-2025-07-03 18:18:34,781 - __main__ - INFO - Data module initialized with 24 train files
-2025-07-03 18:18:34,826 - __main__ - INFO - Sample batch shapes:
-2025-07-03 18:18:34,826 - __main__ - INFO -   cape: torch.Size([1, 19, 26])
-2025-07-03 18:18:34,826 - __main__ - INFO -   terrain: torch.Size([1, 710, 710])
-2025-07-03 18:18:34,826 - __main__ - INFO -   lightning: torch.Size([181, 221])
-2025-07-03 18:18:34,826 - __main__ - INFO - Creating trainer and model...
-2025-07-03 18:18:34,881 - __main__ - ERROR - Failed to create trainer/model: out_channels must be divisible by groups
+2025-07-09 11:42:45,407 - __main__ - INFO - Loaded configuration from config
+2025-07-09 11:42:45,424 - __main__ - INFO - Configuration validation completed
+2025-07-09 11:42:45,425 - __main__ - INFO - Created directories for experiment: lightning_cape_seasonal_20250709_114242
+2025-07-09 11:42:45,430 - __main__ - INFO - Saved experiment configuration to experiments/lightning_cape_seasonal_20250709_114242/config.yaml
+2025-07-09 11:42:45,430 - __main__ - INFO - Initializing data module...
+2025-07-09 11:42:45,430 - src.data.data_loader - INFO - Setting up data for stage: fit
+2025-07-09 11:42:45,433 - src.data.data_loader - INFO - Loaded 24 train, 4 val, 8 test file pairs
+2025-07-09 11:42:45,433 - src.data.data_loader - INFO - Setting up data preprocessor...
+2025-07-09 11:42:45,433 - src.data.preprocessing - INFO - Computing normalization statistics for cape
+2025-07-09 11:42:45,597 - src.data.preprocessing - INFO - cape normalization stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
+2025-07-09 11:42:45,598 - src.data.preprocessing - INFO - Computing normalization statistics for terrain
+2025-07-09 11:42:45,602 - src.data.preprocessing - INFO - terrain normalization stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
+2025-07-09 11:42:45,602 - src.data.data_loader - INFO - CAPE stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
+2025-07-09 11:42:45,602 - src.data.data_loader - INFO - Terrain stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
+2025-07-09 11:42:45,603 - src.data.dataset - INFO - Building dataset sample index...
+2025-07-09 11:42:45,756 - src.data.dataset - INFO - Built dataset index with 17592 samples
+2025-07-09 11:42:45,756 - src.data.dataset - INFO - Building dataset sample index...
+2025-07-09 11:42:45,781 - src.data.dataset - INFO - Built dataset index with 2928 samples
+2025-07-09 11:42:45,781 - __main__ - INFO - Data module initialized with 24 train files
+2025-07-09 11:42:45,806 - __main__ - INFO - Sample batch shapes:
+2025-07-09 11:42:45,806 - __main__ - INFO -   cape: torch.Size([1, 19, 26])
+2025-07-09 11:42:45,806 - __main__ - INFO -   terrain: torch.Size([1, 710, 710])
+2025-07-09 11:42:45,806 - __main__ - INFO -   lightning: torch.Size([181, 221])
+2025-07-09 11:42:45,806 - __main__ - INFO - Creating trainer and model...
+/home/dev/WRF/miniconda3/envs/lightning-pred/lib/python3.8/site-packages/lightning_fabric/connector.py:571: `precision=16` is supported for historical reasons but its usage is discouraged. Please set your precision to 16-mixed instead!
+Using 16bit Automatic Mixed Precision (AMP)
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+HPU available: False, using: 0 HPUs
+`Trainer(val_check_interval=1.0)` was configured so validation will run at the end of the training epoch..
+2025-07-09 11:42:45,952 - __main__ - INFO - Model created:
+2025-07-09 11:42:45,952 - __main__ - INFO -   Total parameters: 25,168,643
+2025-07-09 11:42:45,952 - __main__ - INFO -   Model size: 96.0 MB
+2025-07-09 11:42:45,952 - __main__ - INFO -   CAPE-only mode: True
+2025-07-09 11:42:45,952 - __main__ - INFO - Starting training...
+You are using a CUDA device ('NVIDIA GeForce RTX 3070 Laptop GPU') that has Tensor Cores. To properly utilize them, you should set `torch.set_float32_matmul_precision('medium' | 'high')` which will trade-off precision for performance. For more details, read https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
+2025-07-09 11:42:45,953 - src.data.data_loader - INFO - Preparing data...
+2025-07-09 11:42:45,993 - src.data.data_loader - INFO - Setting up data for stage: fit
+2025-07-09 11:42:45,995 - src.data.data_loader - INFO - Loaded 24 train, 4 val, 8 test file pairs
+2025-07-09 11:42:45,995 - src.data.data_loader - INFO - Setting up data preprocessor...
+2025-07-09 11:42:45,995 - src.data.preprocessing - INFO - Computing normalization statistics for cape
+2025-07-09 11:42:46,180 - src.data.preprocessing - INFO - cape normalization stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
+2025-07-09 11:42:46,181 - src.data.preprocessing - INFO - Computing normalization statistics for terrain
+2025-07-09 11:42:46,185 - src.data.preprocessing - INFO - terrain normalization stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
+2025-07-09 11:42:46,185 - src.data.data_loader - INFO - CAPE stats: {'mean': 582.4618530273438, 'std': 958.6071166992188}
+2025-07-09 11:42:46,185 - src.data.data_loader - INFO - Terrain stats: {'mean': 248.5579071044922, 'std': 252.46376037597656}
+2025-07-09 11:42:46,185 - src.data.dataset - INFO - Building dataset sample index...
+2025-07-09 11:42:46,339 - src.data.dataset - INFO - Built dataset index with 17592 samples
+2025-07-09 11:42:46,340 - src.data.dataset - INFO - Building dataset sample index...
+2025-07-09 11:42:46,365 - src.data.dataset - INFO - Built dataset index with 2928 samples
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+2025-07-09 11:42:46,539 - __main__ - ERROR - Training failed: Unknown optimizer type: AdamW
    ✓ Encoders built (CAPE: 256ch, Terrain: 64ch)
+   ✓ Fusion modules built (Output: 512ch)
+   ✓ Core processing built (GNN: 256ch, Transformer: 256ch)
+   ✓ Prediction head built (Output: 1ch)
+   ✓ Domain adaptation built
+✅ Lightning Prediction Model initialized
+   - CAPE-only mode: True
+   - Domain adaptation: True
+   - Physics constraints: True
+Lightning Trainer initialized:
+  - Model parameters: 25,168,643
+  - Gradient accumulation: 4 steps
+  - Domain adaptation: True
+  - Physics loss weight: 0.1

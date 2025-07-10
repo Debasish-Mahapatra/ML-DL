@@ -31,3 +31,11 @@ Thumbs.db
 experiments/*/logs/
 experiments/*/checkpoints/
 outputs/
+experiments/
+
+# Logs and training outputs
+logs/
+*.log
+experiments/*/logs/
+lightning_training*.log
+nohup.out

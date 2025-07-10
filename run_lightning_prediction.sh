@@ -238,6 +238,12 @@ train_model() {
         --experiment-name "$EXPERIMENT_NAME" \
         --logger tensorboard \
         --seed 42
+
+    #deepspeed --num_gpus=2 scripts/train.py \
+    #    --config "$CONFIG_DIR" \
+    #    --experiment-name "$EXPERIMENT_NAME" \          # Modification for DeepSpeed integration
+    #    --seed 42
+    
     
     if [ $? -eq 0 ]; then
         print_success "Model training completed successfully"

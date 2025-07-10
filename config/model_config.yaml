@@ -1,67 +1,74 @@
-# Model Configuration
+# Model Configuration - RESTORED Original Size with DeepSpeed Memory Management
 model:
   name: "LightningPredictor"
   
-  # Architecture Components
+  # Architecture Components - SCALED TO ~40M PARAMETERS
   encoders:
     cape:
       type: "CNN2D"
-      channels: [32, 64, 128, 256]
+      channels: [64, 128, 256, 512]  # DOUBLED: From [32, 64, 128, 256]
       kernel_sizes: [7, 5, 3, 3]
       activation: "relu"
       dropout: 0.1
       
     era5:
       type: "CNN3D"
-      in_channels: 9
+      in_channels: 6  # u_wind, v_wind, vertical_velocity, temperature, geopotential, specific_humidity
       pressure_levels: 7
-      channels: [32, 64, 128, 256]
+      channels: [64, 128, 256, 512]  # DOUBLED: From [32, 64, 128, 256]
       kernel_sizes: [3, 3, 3, 3]
       activation: "relu"
       dropout: 0.1
       
     terrain:
       type: "TerrainEncoder"
-      embedding_dim: 64
+      embedding_dim: 128  # DOUBLED: From 64 to 128
       learnable_downsample: true
       downsample_method: "learned_conv"
       
-  # Fusion Components
+  # Fusion Components - SCALED UP
   fusion:
     meteorological:
       type: "FeatureFusion"
       fusion_method: "concatenation"
-      hidden_dim: 512
+      hidden_dim: 1024  # DOUBLED: From 512 to 1024
       
     multiscale:
       type: "TerrainGuidedUpsampling"
       upsampling_factor: 8.33
       guidance_weight: 0.3
       
-  # Core Processing
+  # Core Processing - SCALED UP FOR 40M PARAMETERS
   gnn:
     type: "GraphAttentionNetwork"
-    hidden_dim: 64  # FIX: Reduce from 128 to 64 to save GPU memory
-    num_layers: 2    # Keep at 2
-    num_heads: 4     # Keep at 4
+    hidden_dim: 256  # DOUBLED: From 128 to 256
+    num_layers: 3    # INCREASED: From 2 to 3 layers
+    num_heads: 8     # DOUBLED: From 4 to 8 heads
     dropout: 0.1
     
   transformer:
     type: "LightweightTransformer"
-    hidden_dim: 64  # FIX: Reduce from 128 to 64 to save GPU memory
-    num_layers: 3   # FIX: Reduce from 4 to 3
-    num_heads: 4    # FIX: Reduce from 8 to 4
+    hidden_dim: 256  # DOUBLED: From 128 to 256
+    num_layers: 6    # INCREASED: From 4 to 6 layers  
+    num_heads: 16    # DOUBLED: From 8 to 16 heads
     dropout: 0.1
     attention_type: "linear"
     
-  # Output Head
+  # Output Head - SCALED UP
   prediction_head:
-    hidden_dim: 128
+    hidden_dim: 256  # DOUBLED: From 128 to 256
     output_dim: 1
     activation: "sigmoid"
     
-  # Domain Adaptation
+  # Domain Adaptation - RESTORED
   domain_adapter:
-    terrain_adaptation_dim: 64
-    meteorological_adaptation_dim: 32
+    terrain_adaptation_dim: 64   # Same as original
+    meteorological_adaptation_dim: 32  # Same as original
     dropout: 0.1
+
+# DeepSpeed will handle the memory management for this larger model
+memory_optimization:
+  # Let DeepSpeed handle memory - don't reduce model capacity
+  gradient_checkpointing: true
+  efficient_attention: true
+  activation_checkpointing: true

@@ -1,0 +1,553 @@
+# Complete Data Configuration - Optimized for DeepSpeed and 8GB VRAM + 16GB RAM + 200GB SWAP
+# Lightning Prediction Model - CAPE-only with Future ERA5 Support
+
+data:
+  # =============================================================================
+  # PATH CONFIGURATION
+  # =============================================================================
+  
+  # Base paths for all data
+  root_dir: "data/processed"
+  splits_dir: "data/splits"
+  raw_data_dir: "data/raw"
+  cache_dir: "data/cache"
+  
+  # =============================================================================
+  # DATA SOURCES CONFIGURATION
+  # =============================================================================
+  
+  meteorological:
+    # CAPE Data (Current Implementation)
+    cape:
+      path: "meteorological/cape"
+      resolution_km: 25
+      variables: ["cape"]
+      units: ["J/kg"]
+      valid_range: [0, 10000]  # Valid CAPE range
+      fill_value: -9999
+      
+      # Memory optimization for CAPE data
+      chunk_size: [32, 32]  # Spatial chunking for memory efficiency
+      compression: "gzip"
+      compression_level: 4
+      dtype: "float32"  # Precision control
+      
+      # Preprocessing options
+      normalize: true
+      normalization_method: "standardize"  # or "minmax"
+      clip_outliers: true
+      outlier_threshold: 3.0  # Standard deviations
+      
+    # ERA5 Data (Future Implementation - Essential Variables Only)
+    era5:
+      path: "meteorological/era5"
+      resolution_km: 25
+      pressure_levels: [1000, 900, 800, 700, 600, 500, 400]
+      
+      # Essential variables for lightning prediction and hydrometeor formation
+      variables:
+        # Wind components
+        - "u_wind"          # U-component of wind (m/s)
+        - "v_wind"          # V-component of wind (m/s)
+        - "vertical_velocity"  # Vertical velocity (Pa/s)
+        
+        # Thermodynamic variables
+        - "temperature"     # Temperature (K)
+        - "geopotential"    # Geopotential (m²/s²)
+        
+        # Moisture variable (for hydrometeor calculations)
+        - "specific_humidity"     # Specific humidity (kg/kg) - better for hydrometeor physics
+      
+      # Variable groupings for memory-efficient loading
+      variable_groups:
+        group_1: ["u_wind", "v_wind", "vertical_velocity"]
+        group_2: ["temperature", "geopotential", "specific_humidity"]
+      
+      # Memory optimization for ERA5 (6 variables only)
+      chunk_size: [16, 16, 7]  # [height, width, pressure_levels]
+      compression: "lzf"  # Fast compression for 3D data
+      lazy_loading: true
+      load_on_demand: true
+      
+      # Data validation for essential variables only
+      valid_ranges:
+        u_wind: [-100, 100]
+        v_wind: [-100, 100]
+        vertical_velocity: [-10, 10]  # Pa/s
+        temperature: [180, 330]       # K
+        geopotential: [0, 350000]     # m²/s²
+        specific_humidity: [0, 0.03]  # kg/kg
+        
+  # Terrain Data
+  terrain:
+    path: "terrain/terrain_odisha_1km.nc"
+    resolution_km: 1
+    variables: ["elevation"]
+    units: ["meters"]
+    valid_range: [0, 3000]  # Elevation range for Odisha
+    
+    # Terrain is static, optimize for caching
+    cache_in_memory: true
+    downsampling_method: "bilinear"  # For memory-efficient downsampling
+    target_resolution: 25  # Downsample to match meteorological data
+    
+    # Terrain preprocessing
+    normalize_elevation: true
+    elevation_bands: 10  # Create elevation categories
+    slope_calculation: true  # Calculate terrain slope
+    aspect_calculation: false  # Disable to save memory
+    
+  # Lightning Target Data
+  lightning:
+    path: "lightning"
+    resolution_km: 3
+    variables: ["lightning_occurrence"]
+    data_type: "binary"  # Binary classification target
+    
+    # Lightning data is sparse (mostly zeros) - optimize accordingly
+    sparse_encoding: true
+    sparse_threshold: 0.01  # 1% non-zero threshold
+    compression: "blosc"  # Best for sparse data
+    
+    # Target preprocessing
+    smoothing: false  # Keep sharp lightning boundaries
+    dilation_kernel: 0  # No spatial dilation
+    temporal_aggregation: "max"  # Max over time windows
+    
+  # =============================================================================
+  # DOMAIN CONFIGURATION
+  # =============================================================================
+  
+  domain:
+    name: "odisha"
+    
+    # Grid sizes for different resolutions
+    grid_size_25km: [85, 85]      # CAPE/ERA5 grid
+    grid_size_3km: [710, 710]     # Lightning target grid
+    grid_size_1km: [2130, 2130]   # Terrain grid
+    
+    # Geographic bounds (Odisha, India)
+    lat_min: 17.78
+    lat_max: 22.57
+    lon_min: 81.37
+    lon_max: 87.53
+    
+    # Domain-specific optimizations
+    boundary_padding: 2  # Minimal padding to save memory
+    land_sea_mask: true  # Apply land/sea mask
+    
+    # Coordinate system
+    projection: "PlateCarree"
+    datum: "WGS84"
+    
+  # =============================================================================
+  # TEMPORAL CONFIGURATION
+  # =============================================================================
+  
+  temporal:
+    resolution: "hourly"
+    sequence_length: 1  # Single timestep (current implementation)
+    
+    # Time range for training data
+    start_date: "2019-01-01"
+    end_date: "2022-12-31"
+    
+    # Future: For sequence models
+    temporal_chunking: true
+    max_sequence_cache: 4  # Limit cached sequences
+    overlap_sequences: false
+    
+    # Temporal filtering
+    filter_seasons: false  # Use all seasons
+    preferred_hours: null  # Use all hours
+    exclude_hours: []  # No hour exclusions
+    
+  # =============================================================================
+  # DATA LOADING - OPTIMIZED FOR YOUR HARDWARE
+  # =============================================================================
+  
+  # Batch Configuration for DeepSpeed
+  batch_size: 1  # Micro-batch size per GPU (DeepSpeed handles accumulation)
+  effective_batch_size: 4  # Effective batch size after gradient accumulation
+  
+  # Worker Configuration - Optimized for 8-core/16-thread Intel i7
+  num_workers: 4  # Use 4 workers (25% of threads for data loading)
+  prefetch_factor: 2  # Prefetch 2 batches per worker
+  persistent_workers: true  # Keep workers alive between epochs
+  
+  # Memory Management
+  pin_memory: true  # Pin memory for faster GPU transfer
+  non_blocking: true  # Non-blocking data transfer
+  drop_last: true  # Drop last incomplete batch for consistent shapes
+  shuffle: true  # Shuffle training data
+  
+  # Advanced Loading Options
+  multiprocessing_context: "spawn"  # Best for CUDA compatibility
+  worker_init_fn: true  # Initialize workers properly
+  timeout: 300  # 5 minute timeout for data loading
+  
+  # =============================================================================
+  # MEMORY AND I/O OPTIMIZATION
+  # =============================================================================
+  
+  loading:
+    # Chunked loading for large files
+    chunk_loading: true
+    chunk_size_mb: 64  # Load 64MB chunks at a time
+    max_chunk_cache: 8  # Cache up to 8 chunks
+    
+    # Memory mapping for efficient file access
+    memory_mapped: true
+    mmap_mode: "r"  # Read-only memory mapping
+    
+    # Caching strategy
+    cache_strategy: "lru"  # Least Recently Used cache
+    cache_size_gb: 2  # Use 2GB of RAM for caching
+    enable_cache: true
+    cache_compression: true
+    
+    # Parallel I/O
+    parallel_io: true
+    io_threads: 2  # Separate I/O threads
+    io_queue_size: 16
+    
+    # Buffer management
+    read_buffer_size: 8192  # 8KB read buffer
+    write_buffer_size: 8192
+    
+  # =============================================================================
+  # DATA SPLITS CONFIGURATION
+  # =============================================================================
+  
+  splits:
+    train: "train_files.txt"
+    val: "val_files.txt"
+    test: "test_files.txt"
+    
+    # Split ratios (used during data preparation)
+    train_ratio: 0.7
+    val_ratio: 0.15
+    test_ratio: 0.15
+    
+    # Split strategy
+    strategy: "temporal"  # or "random", "spatial"
+    temporal_split_year: 2022  # Use 2022 for testing
+    
+    # Cross-validation support (future)
+    enable_cv: false
+    cv_folds: 5
+    
+  # =============================================================================
+  # DATA PIPELINE OPTIMIZATIONS
+  # =============================================================================
+  
+  pipeline:
+    # Preprocessing pipeline
+    normalize_on_fly: true  # Normalize during loading to save storage
+    standardize_coordinates: true
+    
+    # Data type optimization
+    precision: "float16"  # Use FP16 for data to match model precision
+    mixed_precision_inputs: true
+    
+    # Spatial optimization
+    spatial_crop: true  # Crop to exact domain bounds
+    remove_padding: true  # Remove unnecessary padding
+    align_grids: true  # Align different resolution grids
+    
+    # Quality control
+    data_validation: true
+    check_nans: true
+    check_infinites: true
+    fill_missing_values: true
+    missing_value_strategy: "interpolate"  # or "mask", "zero"
+    
+  # =============================================================================
+  # DATA AUGMENTATION - MEMORY OPTIMIZED
+  # =============================================================================
+  
+  augmentation:
+    enabled: false    # Change from true to false 
+    apply_probability: 0.7  # Don't augment every sample
+    
+    # Spatial augmentations (applied on-the-fly)
+    spatial:
+      enabled: true
+      
+      # Rotation
+      rotation:
+        enabled: true
+        range: [-15, 15]  # Degrees, reduced range to save computation
+        probability: 0.3
+        
+      # Flipping
+      flip_horizontal:
+        enabled: true
+        probability: 0.3  # Reduced probability
+      flip_vertical:
+        enabled: true
+        probability: 0.3
+        
+      # Translation (disabled for memory)
+      translation:
+        enabled: false
+        max_shift: 5  # pixels
+        
+      # Scaling
+      scaling:
+        enabled: true
+        range: [0.95, 1.05]
+        probability: 0.2
+        
+      # Expensive augmentations disabled for memory saving
+      elastic_transform: false
+      grid_distortion: false
+      perspective_transform: false
+      
+    # Meteorological augmentations (lightweight)
+    meteorological:
+      enabled: true
+      
+      # Additive noise
+      noise:
+        enabled: true
+        std: 0.005  # Reduced noise to save computation
+        probability: 0.5
+        
+      # Multiplicative scaling
+      scaling:
+        enabled: true
+        factor_range: [0.98, 1.02]  # Smaller scale range
+        probability: 0.3
+        
+      # CAPE-specific augmentations
+      cape_scaling:
+        enabled: true
+        range: [0.95, 1.05]
+        probability: 0.4
+        
+      # ERA5-specific augmentations (future - essential variables only)
+      era5_perturbation:
+        enabled: false
+        temperature_noise: 0.5  # Kelvin
+        humidity_noise: 0.001  # kg/kg (specific humidity)
+        wind_noise: 1.0  # m/s
+        geopotential_noise: 100  # m²/s²
+        
+    # Augmentation memory settings
+    cache_augmented: false  # Don't cache augmented data
+    augment_targets: false  # Don't augment lightning targets
+    
+  # =============================================================================
+  # VALIDATION AND TESTING CONFIGURATION
+  # =============================================================================
+  
+  validation:
+    batch_size: 1  # Same as training for consistency
+    num_workers: 2  # Fewer workers for validation
+    shuffle: false  # No shuffling needed for validation
+    pin_memory: true
+    drop_last: false  # Keep all validation data
+    
+    # Validation-specific settings
+    apply_augmentation: false
+    deterministic_loading: true
+    
+  test:
+    batch_size: 1
+    num_workers: 1  # Minimal workers for testing
+    shuffle: false
+    pin_memory: true
+    drop_last: false
+    
+    # Test-specific settings
+    full_precision: true  # Use FP32 for testing accuracy
+    save_predictions: true
+    save_features: false  # Save intermediate features if needed
+    
+  # =============================================================================
+  # MEMORY MONITORING AND LIMITS
+  # =============================================================================
+  
+  memory:
+    # Dataset memory limits
+    max_dataset_memory_gb: 4  # Limit dataset memory usage
+    max_cache_memory_gb: 2
+    
+    # DataLoader memory monitoring
+    monitor_memory: true
+    memory_warning_threshold: 0.85  # Warn at 85% memory usage
+    memory_critical_threshold: 0.95
+    
+    # Emergency memory management
+    emergency_gc: true  # Enable garbage collection under memory pressure
+    gc_threshold: 0.9  # Trigger GC at 90% memory usage
+    gc_interval: 100  # Check every 100 batches
+    
+    # Memory profiling
+    profile_memory: false  # Enable for debugging only
+    memory_snapshot_interval: 1000  # Every 1000 batches
+    
+  # =============================================================================
+  # DEEPSPEED INTEGRATION SETTINGS
+  # =============================================================================
+  
+  deepspeed:
+    # Data loading optimizations for DeepSpeed
+    zero_stage_data_loading: true
+    
+    # CPU offloading for data
+    offload_data_to_cpu: true
+    data_offload_pin_memory: true
+    
+    # Data pipeline parallelism
+    data_parallel_size: 1  # Single GPU setup
+    
+    # Memory-efficient data structures
+    sparse_gradients: true  # For lightning data sparsity
+    gradient_compression: true
+    
+    # DeepSpeed-specific data settings
+    dataloader_drop_last: true
+    dataloader_num_workers: 4
+    dataloader_pin_memory: true
+    
+  # =============================================================================
+  # HARDWARE-SPECIFIC OPTIMIZATIONS
+  # =============================================================================
+  
+  hardware_optimization:
+    # Your hardware: Intel i7 8-core/16-thread, 8GB VRAM, 16GB RAM, 200GB NVME SWAP
+    
+    # CPU optimization
+    cpu_cores: 8
+    cpu_threads: 16
+    numa_aware: false  # Single socket system
+    cpu_affinity: false  # Let OS handle scheduling
+    
+    # Memory optimization  
+    vram_gb: 8
+    system_ram_gb: 16
+    swap_gb: 200
+    
+    # Storage optimization
+    nvme_ssd: true
+    io_optimization: "nvme"
+    direct_io: false  # Use OS caching
+    
+    # Data placement strategy
+    data_placement:
+      active_data: "vram"      # Current batch in VRAM
+      staging_data: "ram"      # Next batch in RAM
+      overflow_data: "swap"    # Remaining data in SWAP
+      
+    # Threading optimization
+    thread_strategy: "balanced"  # Balance between data loading and training
+    omp_num_threads: 4  # OpenMP threads for numerical operations
+    
+  # =============================================================================
+  # DEBUGGING AND MONITORING
+  # =============================================================================
+  
+  debug:
+    enabled: false  # Set to true for debugging
+    
+    # Logging
+    log_memory_usage: true
+    log_loading_times: true
+    log_batch_statistics: false
+    log_augmentation_effects: false
+    
+    # Profiling
+    profile_data_loading: false  # Enable for debugging only
+    profile_augmentation: false
+    profile_io_operations: false
+    
+    # Validation
+    validate_data_integrity: true
+    check_data_consistency: true
+    validate_coordinates: true
+    
+    # Debug outputs
+    save_debug_samples: false
+    debug_sample_count: 10
+    debug_output_dir: "debug/data_samples"
+    
+  # =============================================================================
+  # ERROR HANDLING AND RECOVERY
+  # =============================================================================
+  
+  error_handling:
+    # File handling
+    skip_corrupted_files: true
+    max_retries: 3
+    retry_delay: 1.0  # seconds
+    
+    # Batch handling
+    fallback_strategy: "skip_batch"  # or "zero_fill", "interpolate"
+    max_consecutive_failures: 5
+    
+    # Memory handling
+    oom_recovery: true
+    reduce_batch_on_oom: true
+    min_batch_size: 1
+    
+    # Logging errors
+    log_errors: true
+    error_log_file: "logs/data_errors.log"
+    
+  # =============================================================================
+  # PERFORMANCE TUNING
+  # =============================================================================
+  
+  performance:
+    # I/O performance
+    prefetch_buffer_size: 4
+    io_timeout: 300  # 5 minutes
+    
+    # CPU performance
+    use_fast_math: true
+    optimize_for_inference: false
+    
+    # Memory performance
+    memory_efficient_attention: true
+    checkpointing: false  # Handled by model
+    
+    # Data loading performance
+    fast_dev_run_samples: 10  # For fast development runs
+    benchmark_mode: false  # Enable for performance benchmarking
+    
+  # =============================================================================
+  # COMPATIBILITY AND VERSIONS
+  # =============================================================================
+  
+  compatibility:
+    pytorch_version: ">=1.12.0"
+    lightning_version: ">=1.8.0"
+    deepspeed_version: ">=0.8.0"
+    
+    # Data format versions
+    netcdf_version: "4"
+    hdf5_version: ">=1.10"
+    
+    # Coordinate reference system
+    crs: "EPSG:4326"  # WGS84
+    
+  # =============================================================================
+  # FUTURE EXTENSIONS
+  # =============================================================================
+  
+  future:
+    # Multi-domain support
+    multi_domain: false
+    domain_adaptation: true
+    
+    # Advanced features
+    uncertainty_quantification: false
+    ensemble_support: false
+    online_learning: false
+    
+    # Data sources
+    satellite_data: false
+    radar_data: false
+    station_data: false

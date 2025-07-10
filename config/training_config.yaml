@@ -1,7 +1,7 @@
-# Training Configuration
+# Complete Training Configuration with DeepSpeed Integration
 training:
-  # Experiment
-  experiment_name: "cape_only_v1"
+  # Experiment Information
+  experiment_name: "cape_only_deepspeed_v1"
   project_name: "lightning_prediction"
   
   # Training Parameters
@@ -9,54 +9,173 @@ training:
   patience: 15
   min_delta: 1e-4
   
-  # Optimizer
+  # DeepSpeed Integration - NEW SECTION
+  deepspeed:
+    enabled: true
+    config_path: "config/deepspeed_config.json"
+    stage: 2  # ZeRO stage 2 for optimal memory/speed balance
+    offload_optimizer: true
+    offload_parameters: true
+    cpu_checkpointing: true
+    pin_memory: true
+    
+  # Optimizer Configuration (DeepSpeed will override but needed for fallback)
   optimizer:
     type: "AdamW"
-    lr: 1e-5  # FIX: Reduce learning rate from 1e-4 to 1e-5 to prevent NaN loss
+    lr: 1e-5  # Reduced learning rate to prevent NaN loss
     weight_decay: 1e-5
+    betas: [0.9, 0.999]
+    eps: 1e-8
+    amsgrad: false
     
-  # Scheduler
+  # Learning Rate Scheduler (DeepSpeed will override but needed for fallback)
   scheduler:
     type: "CosineAnnealingWarmRestarts"
     T_0: 50
     T_mult: 2
     eta_min: 1e-6
+    last_epoch: -1
     
-# Loss
+  # Loss Function Configuration
   loss:
     type: "composite"
     primary: "focal"
     physics_weight: 0.02
     charge_separation_weight: 0.01
-    microphysics_weight: 0.01  # FIX: Enable with low weight (will be zero without temperature data)
+    microphysics_weight: 0.01  # Low weight since no temperature data yet
     terrain_consistency_weight: 0.005
-    adaptive_weights: true  # FIX: Enable adaptive tuning
-    adaptive_weighting: true  # FIX: Enable adaptive main/physics balance
+    adaptive_weights: true  # Enable adaptive loss weight tuning
+    adaptive_weighting: true  # Enable adaptive main/physics balance
+    focal_alpha: 0.25
+    focal_gamma: 2.0
     
-  # Hardware
+  # Hardware Configuration - MODIFIED FOR DEEPSPEED
   accelerator: "gpu"
   devices: 1
-  precision: 32
+  precision: 16  # CHANGED: From 32 to 16-bit for DeepSpeed FP16
+  strategy: "deepspeed"  # CHANGED: Use DeepSpeed strategy instead of default
+  sync_batchnorm: false  # Not needed for single GPU
   
-  # Memory Optimization
-  gradient_accumulation_steps: 16  # FIX: Increase from 4 to 8 to compensate for smaller batch
+  # Memory Optimization - ADJUSTED FOR DEEPSPEED
+  gradient_accumulation_steps: 4  # REDUCED: DeepSpeed handles this efficiently
   max_grad_norm: 1.0
+  gradient_clip_val: 1.0
+  gradient_clip_algorithm: "norm"
   
-  # Reproducibility
+  # Memory Management Settings
+  memory_optimization:
+    pin_memory: true
+    persistent_workers: true
+    prefetch_factor: 2
+    num_workers: 2  # Limited for memory conservation
+    drop_last: true
+    shuffle: true
+    
+  # Reproducibility Settings
   seed: 42
-  deterministic: true
+  deterministic: false  # CHANGED: Set to false for DeepSpeed compatibility
+  benchmark: true  # Enable for better performance with consistent input sizes
   
-  # Logging
+  # Logging Configuration
   log_every_n_steps: 50
   val_check_interval: 1.0
+  check_val_every_n_epoch: 1
+  log_gpu_memory: true
   
-  # Checkpointing
-  save_top_k: 3
-  save_last: true
-  monitor: "val_f1_score"
-  mode: "max"
-  
-  # Domain Adaptation
+  # Checkpointing Configuration - MODIFIED FOR DEEPSPEED
+  checkpointing:
+    save_top_k: 3
+    save_last: true
+    monitor: "val_f1_score"
+    mode: "max"
+    every_n_epochs: 5  # Save less frequently to reduce I/O overhead
+    save_weights_only: false
+    auto_insert_metric_name: false
+    
+  # Early Stopping Configuration
+  early_stopping:
+    monitor: "val_f1_score"
+    patience: 15
+    mode: "max"
+    min_delta: 1e-4
+    verbose: true
+    strict: true
+    
+  # Model Validation
+  validation:
+    sanity_checks: 2
+    limit_val_batches: 1.0
+    limit_test_batches: 1.0
+    
+  # Training Monitoring
+  profiler:
+    enabled: false  # Disable for production runs
+    sort_by: "cuda_time_total"
+    row_limit: 10
+    
+  # Domain Adaptation Configuration
   domain_adaptation:
     enabled: true
     adaptation_layers: ["terrain", "meteorological"]
+    adaptation_weight: 0.1
+    adversarial_training: false
+    
+  # Physics-Informed Training
+  physics:
+    enabled: true
+    charge_separation_weight: 0.01
+    conservation_laws: true
+    thermodynamic_consistency: true
+    
+  # DeepSpeed Specific Settings - NEW SECTION
+  deepspeed_settings:
+    save_16bit_model: true  # Save models in FP16 to save disk space
+    zero_force_ds_cpu_optimizer: true  # Force CPU optimizer for memory saving
+    zero_allow_untested_optimizer: true  # Allow custom optimizers
+    logging_batch_size_per_gpu: 1
+    steps_per_print: 100
+    wall_clock_breakdown: false
+    memory_breakdown: false
+    dump_state: false
+    
+  # Advanced Memory Settings for Your Hardware
+  memory_settings:
+    # Your hardware: 8GB VRAM + 16GB RAM + 200GB SWAP
+    cpu_offload: true
+    nvme_offload: true  # Use your fast NVME SSD
+    max_live_parameters: 1e9  # Limit live parameters in GPU memory
+    max_reuse_distance: 1000  # Reuse activations efficiently
+    
+  # Compilation Settings (for PyTorch 2.0+)
+  compile:
+    enabled: false  # Disable initially, can enable after DeepSpeed is stable
+    mode: "default"
+    dynamic: true
+    
+  # Debugging and Development
+  debugging:
+    fast_dev_run: false
+    overfit_batches: 0
+    limit_train_batches: 1.0
+    limit_val_batches: 1.0
+    detect_anomaly: false  # Disable for performance
+    
+  # Callbacks Configuration
+  callbacks:
+    model_checkpoint: true
+    early_stopping: true
+    learning_rate_monitor: true
+    gpu_stats_monitor: true
+    model_summary: true
+    
+  # Logging Backends
+  logger:
+    tensorboard: true
+    wandb: false  # Set to true if you want to use Weights & Biases
+    csv: true
+    
+  # Resume Training
+  resume:
+    enabled: false
+    checkpoint_path: null
+    strict_loading: true

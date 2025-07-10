@@ -21,9 +21,6 @@ data:
         - "vertical_velocity" 
         - "temperature"
         - "geopotential"
-        - "ice_water_content"
-        - "liquid_water_content"
-        - "water_vapor_content"
         - "specific_humidity"
         
   terrain:
@@ -49,8 +46,8 @@ data:
     sequence_length: 1
     
   # Data Loading
-  batch_size: 1  # FIX: Reduce from 4 to 1 to save GPU memory
-  num_workers: 2  # FIX: Reduce from 4 to 2
+  batch_size: 1
+  num_workers: 4
   pin_memory: true
   
   # Data Splits
@@ -59,12 +56,12 @@ data:
     val: "val_files.txt"
     test: "test_files.txt"
     
-  # Augmentation
+  # Augmentation - SIMPLE FORMAT
   augmentation:
     spatial:
-      rotation: [-30, 30]
-      flip_horizontal: 0.5
-      flip_vertical: 0.5
+      rotation: [-15, 15]
+      flip_horizontal: 0.3
+      flip_vertical: 0.3
     meteorological:
-      noise_std: 0.01
-      scale_factor: [0.95, 1.05]
+      noise_std: 0.005
+      scale_factor: [0.98, 1.02]

@@ -89,9 +89,9 @@ class TerrainEncoder(nn.Module):
     
         # Sobel filters for gradient computation
         sobel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], 
-                              dtype=torch.float32, device=terrain_features.device)
+                      dtype=terrain_features.dtype, device=terrain_features.device)
         sobel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], 
-                              dtype=torch.float32, device=terrain_features.device)
+                      dtype=terrain_features.dtype, device=terrain_features.device)
     
         # Reshape for grouped convolution - one filter per channel
         sobel_x = sobel_x.view(1, 1, 3, 3).repeat(num_channels, 1, 1, 1)

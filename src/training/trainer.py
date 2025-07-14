@@ -72,6 +72,27 @@ class LightningTrainer(pl.LightningModule):
         # Metric tracking
         self.metric_tracker = MetricTracker()
         
+        # Terrain Warm-up Logic
+        self.terrain_warmup_epochs = self.training_config.get('warmup_epochs', False)
+        
+        if self.terrain_warmup_epochs is False:
+            logger.info("Warm-up is disabled. Model will run in permanent CAPE-only mode.")
+            self.model.cape_only_mode = True
+            logger.info("Freezing terrain encoder parameters.")
+            for param in self.model.terrain_encoder.parameters():
+                param.requires_grad = False
+
+        elif isinstance(self.terrain_warmup_epochs, int) and self.terrain_warmup_epochs > 0:
+            logger.info(f"Terrain warm-up enabled. Model will run with a frozen terrain encoder for {self.terrain_warmup_epochs} epochs.")
+            self.model.cape_only_mode = True
+            logger.info("Freezing terrain encoder parameters for warm-up phase.")
+            for param in self.model.terrain_encoder.parameters():
+                param.requires_grad = False
+        
+        elif self.terrain_warmup_epochs == 0:
+            logger.info("terrain_warmup_epochs is 0. Training with terrain data from the start.")
+            self.model.cape_only_mode = False
+        
         # Training state
         self.automatic_optimization = True
         self.gradient_accumulation_steps = getattr(self.training_config, 'gradient_accumulation_steps', 4)
@@ -106,50 +127,28 @@ class LightningTrainer(pl.LightningModule):
     def configure_optimizers(self) -> Dict[str, Any]:
         """Configure optimizer and learning rate scheduler for DeepSpeed."""
         
-        # DeepSpeed handles optimizer configuration, but we need to provide fallback
-        
         if self.deepspeed_enabled:
-            # Return minimal config - DeepSpeed will override
-            optimizer = AdamW(self.parameters(), lr=float(self.training_config.optimizer.lr))
-            return {
-                "optimizer": optimizer,
-                "lr_scheduler": {
-                    "scheduler": CosineAnnealingWarmRestarts(
-                        optimizer,  # Use the same optimizer instance
-                        T_0=50
-                    ),
-                    "interval": "epoch"
-                }
-            }
+            return {}
         
-        # Standard configuration for non-DeepSpeed training
+        trainable_params = filter(lambda p: p.requires_grad, self.parameters())
         optimizer_config = self.training_config.optimizer
         
-        # Create optimizer
         if optimizer_config.type.lower() == "adamw":
             optimizer = AdamW(
-                self.parameters(),
+                trainable_params,
                 lr=optimizer_config.lr,
                 weight_decay=optimizer_config.weight_decay,
                 betas=getattr(optimizer_config, 'betas', [0.9, 0.999]),
                 eps=getattr(optimizer_config, 'eps', 1e-8)
             )
-        elif optimizer_config.type.lower() == "sgd":
+        else: # Default to SGD
             optimizer = SGD(
-                self.parameters(),
+                trainable_params,
                 lr=optimizer_config.lr,
                 weight_decay=optimizer_config.weight_decay,
                 momentum=getattr(optimizer_config, 'momentum', 0.9)
             )
-        else:
-            # Default to AdamW
-            optimizer = AdamW(
-                self.parameters(),
-                lr=optimizer_config.lr,
-                weight_decay=getattr(optimizer_config, 'weight_decay', 1e-5)
-            )
         
-        # Create scheduler
         scheduler_config = self.training_config.scheduler
         
         if scheduler_config.type == "CosineAnnealingWarmRestarts":
@@ -159,13 +158,7 @@ class LightningTrainer(pl.LightningModule):
                 T_mult=getattr(scheduler_config, 'T_mult', 2),
                 eta_min=getattr(scheduler_config, 'eta_min', 1e-6)
             )
-            return {
-                "optimizer": optimizer,
-                "lr_scheduler": {
-                    "scheduler": scheduler,
-                    "interval": "epoch"
-                }
-            }
+            return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "interval": "epoch"}}
         elif scheduler_config.type == "OneCycleLR":
             scheduler = OneCycleLR(
                 optimizer,
@@ -173,30 +166,21 @@ class LightningTrainer(pl.LightningModule):
                 total_steps=self.trainer.estimated_stepping_batches,
                 pct_start=getattr(scheduler_config, 'pct_start', 0.3)
             )
-            return {
-                "optimizer": optimizer,
-                "lr_scheduler": {
-                    "scheduler": scheduler,
-                    "interval": "step"
-                }
-            }
+            return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "interval": "step"}}
         else:
             return {"optimizer": optimizer}
     
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Training step with memory optimization."""
         
-        # Extract data
         cape_data = batch['cape']
         terrain_data = batch['terrain']
         lightning_target = batch['lightning']
         era5_data = batch.get('era5', None)
         
-        # Forward pass
         outputs = self.forward(cape_data, terrain_data, era5_data)
         predictions = outputs['lightning_prediction']
         
-        # Compute loss
         loss_dict = self.loss_function(
             predictions, 
             lightning_target,
@@ -206,25 +190,21 @@ class LightningTrainer(pl.LightningModule):
         
         total_loss = loss_dict['total_loss']
         
-        # Update metrics
         self.train_metrics.update(predictions, lightning_target)
         
-        # Log losses
-        self.log('train_loss', total_loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log('train_loss', total_loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
         for loss_name, loss_value in loss_dict.items():
             if loss_name != 'total_loss':
-                self.log(f'train_{loss_name}', loss_value, on_step=False, on_epoch=True)
+                self.log(f'train_{loss_name}', loss_value, on_step=False, on_epoch=True, sync_dist=True)
         
-        # Update accumulation step counter
         self.current_accumulation_step += 1
         
-        # Clear cache periodically for memory management
         if batch_idx % 50 == 0:
             torch.cuda.empty_cache()
         
         return total_loss
     
-    def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
+    def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int):
         """Validation step."""
         
         cape_data = batch['cape']
@@ -232,11 +212,9 @@ class LightningTrainer(pl.LightningModule):
         lightning_target = batch['lightning']
         era5_data = batch.get('era5', None)
         
-        # Forward pass
         outputs = self.forward(cape_data, terrain_data, era5_data)
         predictions = outputs['lightning_prediction']
         
-        # Compute loss
         loss_dict = self.loss_function(
             predictions, 
             lightning_target,
@@ -247,18 +225,14 @@ class LightningTrainer(pl.LightningModule):
         
         total_loss = loss_dict['total_loss']
         
-        # Update metrics
         self.val_metrics.update(predictions, lightning_target)
         
-        # Log losses
-        self.log('val_loss', total_loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log('val_loss', total_loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
         for loss_name, loss_value in loss_dict.items():
             if loss_name != 'total_loss':
-                self.log(f'val_{loss_name}', loss_value, on_step=False, on_epoch=True)
+                self.log(f'val_{loss_name}', loss_value, on_step=False, on_epoch=True, sync_dist=True)
         
-        return total_loss
-    
-    def test_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
+    def test_step(self, batch: Dict[str, torch.Tensor], batch_idx: int):
         """Test step."""
         
         cape_data = batch['cape']
@@ -266,26 +240,21 @@ class LightningTrainer(pl.LightningModule):
         lightning_target = batch['lightning']
         era5_data = batch.get('era5', None)
         
-        # Forward pass
         outputs = self.forward(cape_data, terrain_data, era5_data)
         predictions = outputs['lightning_prediction']
         
-        # Compute loss
         loss_dict = self.loss_function(
             predictions, 
             lightning_target,
             cape_data=cape_data,
             terrain_data=terrain_data,
-            
         )
         
         total_loss = loss_dict['total_loss']
         
-        # Update metrics
         self.test_metrics.update(predictions, lightning_target)
+        self.log('test_loss', total_loss, on_step=False, on_epoch=True, sync_dist=True)
         
-        return total_loss
-    
     def predict_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> Dict[str, torch.Tensor]:
         """Prediction step for inference."""
         
@@ -307,84 +276,78 @@ class LightningTrainer(pl.LightningModule):
     def on_train_epoch_start(self):
         """Called at the start of each training epoch."""
         
-        # Log current learning rate
-        current_lr = self.optimizers().param_groups[0]['lr']
-        self.log('learning_rate', current_lr, on_epoch=True)
+        if isinstance(self.terrain_warmup_epochs, int) and self.terrain_warmup_epochs > 0:
+            if self.current_epoch == self.terrain_warmup_epochs:
+                logger.info(f"--- Epoch {self.current_epoch}: Terrain warm-up complete! ---")
+                logger.info("Unfreezing terrain encoder.")
+                
+                for param in self.model.terrain_encoder.parameters():
+                    param.requires_grad = True
+                    
+                if hasattr(self.trainer, 'strategy') and hasattr(self.trainer.strategy, 'setup_optimizers'):
+                    self.trainer.strategy.setup_optimizers(self.trainer)
+                    logger.info("Optimizers re-initialized to include terrain encoder parameters.")
+                else:
+                    logger.warning("Could not re-initialize optimizers. New parameters may not be trained.")
+
+        if self.trainer.optimizers:
+            current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
+            self.log('learning_rate', current_lr, on_epoch=True, sync_dist=True)
         
-        # Reset accumulation step counter
         self.current_accumulation_step = 0
         
-        # Domain adaptation warmup
         if self.domain_adaptation_enabled and self.current_epoch < self.domain_adaptation_warmup:
-            # Reduce domain adaptation influence during warmup
             domain_weight = self.current_epoch / self.domain_adaptation_warmup
-            self.log('domain_adaptation_weight', domain_weight, on_epoch=True)
+            self.log('domain_adaptation_weight', domain_weight, on_epoch=True, sync_dist=True)
     
     def on_train_epoch_end(self) -> None:
         """Log training metrics at epoch end."""
         
-        # Compute and log training metrics
         train_metrics = self.train_metrics.compute()
-        
         for metric_name, metric_value in train_metrics.items():
-            self.log(f'train_{metric_name}', metric_value, on_epoch=True)
+            self.log(f'train_{metric_name}', metric_value, on_epoch=True, sync_dist=True)
         
-        # Reset metrics
         self.train_metrics.reset()
         
-        # Reset accumulation step counter
         self.current_accumulation_step = 0
     
     def on_validation_epoch_end(self) -> None:
         """Log validation metrics at epoch end."""
         
-        # Compute and log validation metrics
         val_metrics = self.val_metrics.compute()
-        
         for metric_name, metric_value in val_metrics.items():
-            self.log(f'val_{metric_name}', metric_value, on_epoch=True, prog_bar=(metric_name == 'f1_score'))
+            self.log(f'val_{metric_name}', metric_value, on_epoch=True, prog_bar=(metric_name == 'f1_score'), sync_dist=True)
         
-        # Track metrics
         self.metric_tracker.update(self.current_epoch, val_metrics)
         
-        # Reset metrics
         self.val_metrics.reset()
         
-        # Log best metrics so far
         best_metrics = self.metric_tracker.get_best_metrics()
         for metric_name, (best_value, best_epoch) in best_metrics.items():
-            self.log(f'best_{metric_name}', best_value, on_epoch=True)
+            self.log(f'best_{metric_name}', best_value, on_epoch=True, sync_dist=True)
     
-    def on_test_epoch_end(self) -> Dict[str, float]:
+    def on_test_epoch_end(self) -> None:
         """Log test metrics at epoch end."""
         
-        # Compute and log test metrics
         test_metrics = self.test_metrics.compute()
-        
         for metric_name, metric_value in test_metrics.items():
-            self.log(f'test_{metric_name}', metric_value, on_epoch=True)
+            self.log(f'test_{metric_name}', metric_value, on_epoch=True, sync_dist=True)
         
-        # Reset metrics
         self.test_metrics.reset()
         
-        return test_metrics
-    
     def on_fit_start(self):
         """Called at the start of training."""
         
-        # Log model information
         total_params = sum(p.numel() for p in self.parameters())
         trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
         
         logger.info(f"Model parameters: {total_params:,} total, {trainable_params:,} trainable")
         
-        # Log hardware information
         if torch.cuda.is_available():
             device_name = torch.cuda.get_device_name(0)
             memory_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
             logger.info(f"GPU: {device_name} ({memory_gb:.1f} GB)")
         
-        # Initialize class weights if needed
         if self.class_weights is None and hasattr(self.trainer.datamodule, 'get_class_weights'):
             self.class_weights = self.trainer.datamodule.get_class_weights()
             logger.info(f"Class weights initialized: {self.class_weights}")
@@ -392,7 +355,6 @@ class LightningTrainer(pl.LightningModule):
     def on_fit_end(self):
         """Called at the end of training."""
         
-        # Log final metrics
         best_metrics = self.metric_tracker.get_best_metrics()
         logger.info("Training completed. Best validation metrics:")
         for metric_name, (best_value, best_epoch) in best_metrics.items():
@@ -417,7 +379,6 @@ class LightningTrainer(pl.LightningModule):
     def on_before_optimizer_step(self, optimizer):
         """Called before optimizer step."""
         
-        # Log gradient norms for debugging
         if self.current_epoch == 0 and self.global_step < 10:
             grad_norm = 0.0
             for p in self.parameters():
@@ -429,13 +390,10 @@ class LightningTrainer(pl.LightningModule):
     def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_closure):
         """Custom optimizer step with gradient accumulation."""
         
-        # Handle gradient accumulation
         if (batch_idx + 1) % self.gradient_accumulation_steps == 0:
-            # Step the optimizer
             optimizer.step(closure=optimizer_closure)
             optimizer.zero_grad()
         else:
-            # Just run the closure to compute gradients
             optimizer_closure()
 
 
@@ -447,22 +405,18 @@ def create_deepspeed_strategy(config: DictConfig) -> Optional[DeepSpeedStrategy]
     if not deepspeed_config.get('enabled', False):
         return None
     
-    # Load DeepSpeed config file
     config_path = deepspeed_config.get('config_path', 'config/deepspeed_config.json')
     
     if not Path(config_path).exists():
         logger.warning(f"DeepSpeed config file not found: {config_path}")
         return None
     
-    # Load and validate DeepSpeed configuration
     with open(config_path, 'r') as f:
         ds_config = json.load(f)
     
-    # Override some settings from training config
     if 'train_micro_batch_size_per_gpu' not in ds_config:
         ds_config['train_micro_batch_size_per_gpu'] = config.data.batch_size
     
-    # Create strategy
     strategy = DeepSpeedStrategy(
         stage=deepspeed_config.get('stage', 2),
         offload_optimizer=deepspeed_config.get('offload_optimizer', True),
@@ -491,10 +445,8 @@ def create_trainer(config: DictConfig,
         Tuple of (pl.Trainer, LightningTrainer)
     """
     
-    # Initialize model
     lightning_module = LightningTrainer(config)
     
-    # Setup logger
     if logger_type == "tensorboard":
         experiment_logger = TensorBoardLogger(
             save_dir="logs",
@@ -510,10 +462,8 @@ def create_trainer(config: DictConfig,
     else:
         experiment_logger = None
     
-    # Setup callbacks
     callbacks = []
     
-    # Model checkpointing
     checkpoint_callback = ModelCheckpoint(
         dirpath=f"experiments/{experiment_name}/checkpoints",
         filename="{epoch:02d}-{val_f1_score:.3f}",
@@ -522,12 +472,11 @@ def create_trainer(config: DictConfig,
         save_top_k=int(config.training.get('save_top_k', 3)),
         save_last=True,
         verbose=True,
-        save_weights_only=False,  # Save full model for DeepSpeed compatibility
+        save_weights_only=False,
         every_n_epochs=config.training.get('every_n_epochs', 1)
     )
     callbacks.append(checkpoint_callback)
     
-    # Early stopping
     early_stop_callback = EarlyStopping(
         monitor="val_f1_score",
         mode="max",
@@ -537,22 +486,19 @@ def create_trainer(config: DictConfig,
     )
     callbacks.append(early_stop_callback)
     
-    # Learning rate monitoring
     lr_monitor = LearningRateMonitor(logging_interval="step")
     callbacks.append(lr_monitor)
     
-    # Create DeepSpeed strategy if enabled
     strategy = create_deepspeed_strategy(config)
     if strategy is None:
-        strategy = "auto"  # Use default strategy
+        strategy = "auto"
         logger.info("Using default PyTorch Lightning strategy")
     
-    # Create trainer with DeepSpeed support
     trainer_kwargs = {
         'max_epochs': int(config.training.get('max_epochs', 100)),
         'accelerator': config.training.get('accelerator', 'gpu'),
         'devices': int(config.training.get('devices', 1)),
-        'precision': config.training.get('precision', 16),  # Use FP16 for DeepSpeed
+        'precision': config.training.get('precision', 16),
         'strategy': strategy,
         'callbacks': callbacks,
         'logger': experiment_logger,
@@ -565,11 +511,10 @@ def create_trainer(config: DictConfig,
         'gradient_clip_val': config.training.get('max_grad_norm', 1.0),
     }
     
-    # Add DeepSpeed-specific settings
     if strategy != "auto":
         trainer_kwargs.update({
             'accumulate_grad_batches': config.training.get('gradient_accumulation_steps', 4),
-            'sync_batchnorm': False,  # Not needed for single GPU
+            'sync_batchnorm': False,
         })
     
     trainer = pl.Trainer(**trainer_kwargs)
@@ -588,12 +533,10 @@ class DomainAdaptationTrainer(LightningTrainer):
     def __init__(self, config: DictConfig, source_checkpoint: str):
         super().__init__(config)
         
-        # Load source model weights
         checkpoint = torch.load(source_checkpoint, map_location='cpu')
         if 'state_dict' in checkpoint:
             self.load_state_dict(checkpoint['state_dict'], strict=False)
         
-        # Domain adaptation settings
         self.freeze_backbone_epochs = getattr(config.training, 'domain_adaptation', {}).get('freeze_epochs', 5)
         self.adaptation_lr_multiplier = getattr(config.training, 'domain_adaptation', {}).get('lr_multiplier', 10.0)
         
@@ -613,7 +556,6 @@ class DomainAdaptationTrainer(LightningTrainer):
     def configure_optimizers(self) -> Dict[str, Any]:
         """Configure optimizer with different learning rates for adaptation."""
         
-        # Separate parameters for different learning rates
         backbone_params = []
         adapter_params = []
         
@@ -623,7 +565,6 @@ class DomainAdaptationTrainer(LightningTrainer):
             else:
                 backbone_params.append(param)
         
-        # Different learning rates
         base_lr = self.training_config.optimizer.lr
         adapter_lr = base_lr * self.adaptation_lr_multiplier
         
@@ -640,7 +581,6 @@ class DomainAdaptationTrainer(LightningTrainer):
                 {'params': adapter_params, 'lr': adapter_lr}
             ], weight_decay=0.01)
         
-        # Use same scheduler configuration as base trainer
         scheduler_config = super().configure_optimizers()
         scheduler_config['optimizer'] = optimizer
         
@@ -657,7 +597,6 @@ class DomainAdaptationTrainer(LightningTrainer):
             self.unfreeze_backbone()
             logger.info("Backbone unfrozen for joint training")
         
-        # Call parent method
         super().on_train_epoch_start()
 
 
@@ -676,10 +615,7 @@ def create_domain_adaptation_trainer(config: DictConfig,
         Tuple of (pl.Trainer, DomainAdaptationTrainer)
     """
     
-    # Initialize domain adaptation model
     lightning_module = DomainAdaptationTrainer(config, source_checkpoint)
-    
-    # Use same trainer setup as regular trainer
     trainer, _ = create_trainer(config, experiment_name)
     
     return trainer, lightning_module

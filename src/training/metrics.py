@@ -69,16 +69,18 @@ class LightningMetrics(nn.Module):
         if probabilities is not None and probabilities.dim() == 4 and probabilities.shape[1] == 1:
             probabilities = probabilities.squeeze(1)
         
-        # Convert to numpy for sklearn metrics
-        pred_np = predictions.detach().cpu().numpy()
-        target_np = targets.detach().cpu().numpy()
+        # --- FIX IS HERE ---
+        # Convert tensors to float32 before converting to numpy to handle bfloat16
+        pred_np = predictions.detach().cpu().float().numpy()
+        target_np = targets.detach().cpu().float().numpy()
         
         # Store for batch computation
         self.predictions_list.append(pred_np)
         self.targets_list.append(target_np)
         
         if probabilities is not None:
-            prob_np = probabilities.detach().cpu().numpy()
+            # Also apply fix to probabilities tensor
+            prob_np = probabilities.detach().cpu().float().numpy()
             self.probabilities_list.append(prob_np)
     
     def compute(self) -> Dict[str, float]:

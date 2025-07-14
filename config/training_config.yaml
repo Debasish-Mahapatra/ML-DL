@@ -1,13 +1,15 @@
 # Complete Training Configuration with DeepSpeed Integration
 training:
-  # Experiment Information
-  experiment_name: "cape_only_deepspeed_v1"
+  # Experiment
+  experiment_name: "Deepspeed_staged_training_v1"
   project_name: "lightning_prediction"
   
   # Training Parameters
   max_epochs: 100
   patience: 15
   min_delta: 1e-4
+  warmup_epochs: 0  # N > 0: CAPE-only for N epochs, then enable terrain. 0: Enable terrain from epoch 0. false: CAPE-only for all epochs.
+  
   
   # DeepSpeed Integration - NEW SECTION
   deepspeed:
@@ -52,7 +54,7 @@ training:
   # Hardware Configuration - MODIFIED FOR DEEPSPEED
   accelerator: "gpu"
   devices: 1
-  precision: 16  # CHANGED: From 32 to 16-bit for DeepSpeed FP16
+  precision: "bf16-mixed"  # CHANGED: Use BFloat16 for better stability
   strategy: "deepspeed"  # CHANGED: Use DeepSpeed strategy instead of default
   sync_batchnorm: false  # Not needed for single GPU
   

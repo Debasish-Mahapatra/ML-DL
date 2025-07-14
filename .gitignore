@@ -31,3 +31,10 @@ Thumbs.db
 experiments/*/logs/
 experiments/*/checkpoints/
 outputs/
+
+# Log directories
+logs/
+
+# Jupyter notebook checkpoints and temporary files
+.ipynb_checkpoints/
+Untitled*.ipynb

@@ -13,7 +13,7 @@ training:
   deepspeed:
     enabled: true
     config_path: "config/deepspeed_config.json"
-    stage: 2  # ZeRO stage 2 for optimal memory/speed balance
+    stage: 3  # ZeRO stage 3 for optimal memory/speed balance
     offload_optimizer: true
     offload_parameters: true
     cpu_checkpointing: true
@@ -22,7 +22,7 @@ training:
   # Optimizer Configuration (DeepSpeed will override but needed for fallback)
   optimizer:
     type: "AdamW"
-    lr: 1e-5  # Reduced learning rate to prevent NaN loss
+    lr: 5e-7  # Reduced from 1e-5 to prevent FP16 overflow
     weight_decay: 1e-5
     betas: [0.9, 0.999]
     eps: 1e-8
@@ -57,7 +57,7 @@ training:
   sync_batchnorm: false  # Not needed for single GPU
   
   # Memory Optimization - ADJUSTED FOR DEEPSPEED
-  gradient_accumulation_steps: 4  # REDUCED: DeepSpeed handles this efficiently
+  gradient_accumulation_steps: 16  # REDUCED: DeepSpeed handles this efficiently
   max_grad_norm: 1.0
   gradient_clip_val: 1.0
   gradient_clip_algorithm: "norm"

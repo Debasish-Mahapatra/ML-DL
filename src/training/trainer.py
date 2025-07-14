@@ -242,7 +242,7 @@ class LightningTrainer(pl.LightningModule):
             lightning_target,
             cape_data=cape_data,
             terrain_data=terrain_data,
-            model_outputs=outputs
+        
         )
         
         total_loss = loss_dict['total_loss']
@@ -276,7 +276,7 @@ class LightningTrainer(pl.LightningModule):
             lightning_target,
             cape_data=cape_data,
             terrain_data=terrain_data,
-            model_outputs=outputs
+            
         )
         
         total_loss = loss_dict['total_loss']

@@ -38,3 +38,6 @@ logs/
 # Jupyter notebook checkpoints and temporary files
 .ipynb_checkpoints/
 Untitled*.ipynb
+error.log
+output.log
+experiments/

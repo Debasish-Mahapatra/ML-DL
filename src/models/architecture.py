@@ -196,11 +196,13 @@ class LightningPredictor(nn.Module):
             Dictionary containing predictions and intermediate features
         """
         batch_size = cape_data.shape[0]
-        target_size = (cape_data.shape[-2] * 8, cape_data.shape[-1] * 8)  # Approximate 3km grid
+        
+        # Get target size for 3km lightning output from config
+        target_lightning_size = tuple(self.config.data.domain.grid_size_3km)
         
         # Step 1: Encode inputs
         cape_features = self.cape_encoder(cape_data)
-        terrain_features = self.terrain_encoder(terrain_data, target_size)
+        terrain_features = self.terrain_encoder(terrain_data, target_lightning_size)
         
         # ERA5 encoding (future)
         if era5_data is not None and self.era5_encoder is not None:
@@ -212,7 +214,10 @@ class LightningPredictor(nn.Module):
         meteorological_features = self.meteorological_fusion(cape_features, era5_features)
         
         # Step 3: Multi-scale fusion (25km → 3km with terrain guidance)
-        fused_features = self.multiscale_fusion(meteorological_features, terrain_features)
+        # Pass target_lightning_size to ensure 3km output resolution
+        fused_features = self.multiscale_fusion(
+            meteorological_features, terrain_features, target_size=target_lightning_size
+        )
         
         # Step 4: Apply domain adaptation if enabled
         if domain_adaptation and self.domain_adapter is not None:

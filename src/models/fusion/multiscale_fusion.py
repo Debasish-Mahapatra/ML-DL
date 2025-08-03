@@ -95,22 +95,25 @@ class MultiScaleFusion(nn.Module):
     
     def forward(self, 
                 met_features: torch.Tensor,
-                terrain_features: torch.Tensor) -> torch.Tensor:
+                terrain_features: torch.Tensor,
+                target_size: Optional[Tuple[int, int]] = None) -> torch.Tensor:
         """
         Forward pass through multi-scale fusion.
         
         Args:
             met_features: Meteorological features (B, met_channels, H_met, W_met) at 25km
-            terrain_features: Terrain features (B, terrain_channels, H_terrain, W_terrain) at 3km
+            terrain_features: Terrain features (B, terrain_channels, H_terrain, W_terrain) at 1km
+            target_size: Target output size (H, W) at 3km resolution for lightning
             
         Returns:
-            Fused features at 3km resolution (B, output_channels, H_terrain, W_terrain)
+            Fused features at 3km resolution (B, output_channels, H_target, W_target)
         """
-        target_size = terrain_features.shape[-2:]
+        if target_size is None:
+            target_size = terrain_features.shape[-2:]
         
         # Upsample meteorological features
         if self.fusion_method == "terrain_guided":
-            upsampled_met = self.terrain_guided_upsample(met_features, terrain_features)
+            upsampled_met = self.terrain_guided_upsample(met_features, terrain_features, target_size)
         else:
             upsampled_met = self.upsample(met_features)
             # Ensure exact target size
@@ -120,12 +123,21 @@ class MultiScaleFusion(nn.Module):
                     mode='bilinear', align_corners=False
                 )
         
+        # Resize terrain features to match target size (for fusion, not downsampling)
+        if terrain_features.shape[-2:] != target_size:
+            terrain_for_fusion = F.interpolate(
+                terrain_features, size=target_size,
+                mode='bilinear', align_corners=False
+            )
+        else:
+            terrain_for_fusion = terrain_features
+        
         # Fusion
         if self.fusion_method in ["terrain_guided", "concatenation"]:
-            fused = torch.cat([upsampled_met, terrain_features], dim=1)
+            fused = torch.cat([upsampled_met, terrain_for_fusion], dim=1)
         else:  # attention
-            attended_met = self.spatial_attention(upsampled_met, terrain_features)
-            fused = torch.cat([attended_met, terrain_features], dim=1)
+            attended_met = self.spatial_attention(upsampled_met, terrain_for_fusion)
+            fused = torch.cat([attended_met, terrain_for_fusion], dim=1)
         
         # Apply fusion network
         output = self.fusion_network(fused)
@@ -211,7 +223,8 @@ class TerrainGuidedUpsampling(nn.Module):
     
     def forward(self, 
                 met_features: torch.Tensor,
-                terrain_features: torch.Tensor) -> torch.Tensor:
+                terrain_features: torch.Tensor,
+                target_size: Tuple[int, int]) -> torch.Tensor:
         """Apply terrain-guided upsampling."""
         
         # Progressive upsampling with terrain guidance
@@ -220,18 +233,17 @@ class TerrainGuidedUpsampling(nn.Module):
         for i, stage in enumerate(self.upsampling_stages):
             upsampled = stage(upsampled)
             
-            # Apply terrain guidance at each stage
+            # Apply terrain guidance at final stage
             if i == len(self.upsampling_stages) - 1:  # Final stage
-                # Ensure exact size match with terrain
-                target_size = terrain_features.shape[-2:]
+                # Ensure exact size match with target
                 if upsampled.shape[-2:] != target_size:
                     upsampled = F.interpolate(
                         upsampled, size=target_size,
                         mode='bilinear', align_corners=False
                     )
                 
-                # Apply terrain guidance
-                upsampled = self.terrain_guidance(upsampled, terrain_features)
+                # Apply terrain guidance (terrain stays at 1km, provides guidance for 3km output)
+                upsampled = self.terrain_guidance(upsampled, terrain_features, target_size)
         
         # Final feature refinement
         output = self.feature_refine(upsampled)
@@ -268,17 +280,27 @@ class TerrainGuidanceNetwork(nn.Module):
     
     def forward(self, 
                 met_features: torch.Tensor,
-                terrain_features: torch.Tensor) -> torch.Tensor:
+                terrain_features: torch.Tensor,
+                target_size: Tuple[int, int]) -> torch.Tensor:
         """Apply terrain guidance to meteorological features."""
         
+        # Resize terrain to target size for guidance computation (not downsampling, just for alignment)
+        if terrain_features.shape[-2:] != target_size:
+            terrain_for_guidance = F.interpolate(
+                terrain_features, size=target_size,
+                mode='bilinear', align_corners=False
+            )
+        else:
+            terrain_for_guidance = terrain_features
+        
         # Generate guidance weights from terrain
-        guidance_weights = self.terrain_to_guidance(terrain_features)
+        guidance_weights = self.terrain_to_guidance(terrain_for_guidance)
         
         # Apply guidance weights
         guided_features = met_features * (1 + self.guidance_weight * guidance_weights)
         
         # Spatial attention based on terrain+met interaction
-        combined = torch.cat([terrain_features, guided_features], dim=1)
+        combined = torch.cat([terrain_for_guidance, guided_features], dim=1)
         spatial_weights = self.spatial_attention(combined)
         
         # Apply spatial attention

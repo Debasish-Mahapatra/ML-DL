@@ -50,7 +50,7 @@ data:
     
   # Data Loading
   batch_size: 1  # FIX: Reduce from 4 to 1 to save GPU memory
-  num_workers: 2  # FIX: Reduce from 4 to 2
+  num_workers: 4  # FIX: Reduce from 4 to 2
   pin_memory: true
   
   # Data Splits

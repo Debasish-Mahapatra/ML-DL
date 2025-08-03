@@ -140,6 +140,186 @@ class GraphNeuralNetwork(nn.Module):
         
         return output
 
+# FIX-Pyramid-START: New Hierarchical Pyramid GNN Implementation
+class PyramidGraphNeuralNetwork(nn.Module):
+    """
+    Hierarchical Pyramid GNN that processes features at multiple scales.
+    Designed to handle large grids by processing at different resolutions.
+    """
+    
+    def __init__(self,
+                 input_channels: int = 256,
+                 hidden_channels: int = 256,
+                 output_channels: int = 256,
+                 num_layers: int = 3,
+                 gnn_type: str = "gat",
+                 num_heads: int = 8,
+                 dropout: float = 0.1,
+                 pyramid_scales: List[int] = [4, 2, 1],  # Downsampling factors: 12km, 6km, 3km
+                 use_edge_features: bool = False):  # Disabled for memory efficiency
+        """
+        Initialize Pyramid GNN.
+        
+        Args:
+            input_channels: Number of input feature channels
+            hidden_channels: Number of hidden channels
+            output_channels: Number of output channels
+            num_layers: Number of GNN layers per scale
+            gnn_type: Type of GNN layer
+            num_heads: Number of attention heads
+            dropout: Dropout probability
+            pyramid_scales: List of downsampling factors [coarse->fine]
+            use_edge_features: Whether to use edge features (disabled for memory)
+        """
+        super().__init__()
+        
+        self.input_channels = input_channels
+        self.hidden_channels = hidden_channels
+        self.output_channels = output_channels
+        self.pyramid_scales = pyramid_scales
+        self.num_scales = len(pyramid_scales)
+        
+        # Create GNN for each scale
+        self.scale_gnns = nn.ModuleList()
+        
+        for i, scale in enumerate(pyramid_scales):
+            # Each scale gets its own GNN
+            scale_gnn = GraphNeuralNetwork(
+                input_channels=hidden_channels if i > 0 else input_channels,
+                hidden_channels=hidden_channels,
+                output_channels=hidden_channels,
+                num_layers=num_layers,
+                gnn_type=gnn_type,
+                num_heads=num_heads,
+                dropout=dropout,
+                graph_connectivity="grid_8",  # FIX-Pyramid: Keep full 8-connectivity
+                use_edge_features=use_edge_features  # FIX-Pyramid: Keep edge features enabled
+            )
+            self.scale_gnns.append(scale_gnn)
+        
+        # Cross-scale fusion modules
+        self.scale_fusion = nn.ModuleList()
+        for i in range(1, self.num_scales):
+            fusion = CrossScaleFusion(hidden_channels, hidden_channels)
+            self.scale_fusion.append(fusion)
+        
+        # Final output projection
+        self.output_projection = nn.Conv2d(hidden_channels, output_channels, 1)
+        
+        print(f"   ✓ Pyramid GNN initialized with scales: {pyramid_scales}")
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass through pyramid GNN.
+        
+        Args:
+            x: Input features (batch_size, channels, height, width)
+            
+        Returns:
+            Output features at original resolution
+        """
+        batch_size, channels, original_height, original_width = x.shape
+        
+        # Store features at each scale
+        scale_features = []
+        current_features = x
+        
+        # Process each scale from coarse to fine
+        for i, (scale, gnn) in enumerate(zip(self.pyramid_scales, self.scale_gnns)):
+            
+            # Downsample to current scale
+            if scale > 1:
+                target_h = original_height // scale
+                target_w = original_width // scale
+                downsampled = F.adaptive_avg_pool2d(current_features, (target_h, target_w))
+            else:
+                downsampled = current_features
+            
+            print(f"   Processing scale {scale}: {downsampled.shape}")
+            
+            # Process with GNN at this scale
+            gnn_output = gnn(downsampled)
+            
+            # Store for cross-scale fusion
+            scale_features.append(gnn_output)
+            
+            # Prepare features for next scale
+            if i < len(self.pyramid_scales) - 1:  # Not the last scale
+                # Upsample to next finer scale
+                next_scale = self.pyramid_scales[i + 1]
+                next_h = original_height // next_scale
+                next_w = original_width // next_scale
+                
+                upsampled = F.interpolate(
+                    gnn_output, size=(next_h, next_w),
+                    mode='bilinear', align_corners=False
+                )
+                
+                # Fuse with original features at next scale
+                if next_scale > 1:
+                    next_original = F.adaptive_avg_pool2d(x, (next_h, next_w))
+                else:
+                    next_original = x
+                
+                current_features = self.scale_fusion[i](upsampled, next_original)
+        
+        # Final output at original resolution
+        final_features = scale_features[-1]  # Features from finest scale
+        
+        # Ensure output matches original resolution
+        if final_features.shape[-2:] != (original_height, original_width):
+            final_features = F.interpolate(
+                final_features, size=(original_height, original_width),
+                mode='bilinear', align_corners=False
+            )
+        
+        # Final projection
+        output = self.output_projection(final_features)
+        
+        return output
+
+class CrossScaleFusion(nn.Module):
+    """Fuses features from different scales in the pyramid."""
+    
+    def __init__(self, channels: int, output_channels: int):
+        super().__init__()
+        
+        self.fusion_conv = nn.Sequential(
+            nn.Conv2d(channels * 2, output_channels, 3, padding=1, bias=False),
+            nn.BatchNorm2d(output_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(output_channels, output_channels, 1)
+        )
+        
+        # Attention weighting
+        self.attention = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(channels * 2, channels // 4, 1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(channels // 4, 2, 1),
+            nn.Softmax(dim=1)
+        )
+    
+    def forward(self, coarse_features: torch.Tensor, fine_features: torch.Tensor) -> torch.Tensor:
+        """Fuse coarse and fine scale features."""
+        
+        # Concatenate features
+        combined = torch.cat([coarse_features, fine_features], dim=1)
+        
+        # Compute attention weights
+        attention_weights = self.attention(combined)
+        
+        # Weighted combination
+        weighted_coarse = coarse_features * attention_weights[:, 0:1]
+        weighted_fine = fine_features * attention_weights[:, 1:2]
+        weighted_combined = torch.cat([weighted_coarse, weighted_fine], dim=1)
+        
+        # Fuse features
+        fused = self.fusion_conv(weighted_combined)
+        
+        return fused
+# FIX-Pyramid-END
+
 class LightningGNNLayer(MessagePassing):
     """
     Custom GNN layer designed for lightning prediction.

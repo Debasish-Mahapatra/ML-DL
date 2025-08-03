@@ -13,6 +13,7 @@ from typing import Dict, Any, Optional, Tuple, Union
 from omegaconf import DictConfig
 import numpy as np
 import logging
+import gc
 
 from ..models.architecture import LightningPredictor
 from .loss_functions import CompositeLoss, create_loss_function
@@ -318,6 +319,13 @@ class LightningTrainer(pl.LightningModule):
         
         # Reset accumulation step counter
         self.current_accumulation_step = 0
+        
+        # FIX-Memory-START: Force GPU memory cleanup after training epoch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            gc.collect()
+            print(f"   GPU memory cleared after training epoch {self.current_epoch}")
+        # FIX-Memory-END
     
     def on_validation_epoch_end(self):
         """Called at the end of validation epoch."""
@@ -338,6 +346,13 @@ class LightningTrainer(pl.LightningModule):
         best_metrics = self.metric_tracker.get_best_metrics()
         for metric_name, (best_value, best_epoch) in best_metrics.items():
             self.log(f'best_{metric_name}', best_value, on_epoch=True)
+        
+        # FIX-Memory-START: Force GPU memory cleanup after validation epoch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            gc.collect()
+            print(f"   GPU memory cleared after validation epoch {self.current_epoch}")
+        # FIX-Memory-END
     
     def on_test_epoch_end(self):
         """Called at the end of test epoch."""

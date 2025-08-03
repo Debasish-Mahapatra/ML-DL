@@ -39,18 +39,23 @@ model:
       guidance_weight: 0.3
       
   # Core Processing
+  # FIX-Pyramid-START: Updated GNN config for Pyramid processing
   gnn:
-    type: "GraphAttentionNetwork"
-    hidden_dim: 64  # FIX: Reduce from 128 to 64 to save GPU memory
-    num_layers: 2    # Keep at 2
-    num_heads: 4     # Keep at 4
+    type: "PyramidGraphNeuralNetwork"  # Changed from GraphAttentionNetwork
+    hidden_dim: 64  # Keep at 64 to save memory
+    num_layers: 2   # Keep at 2
+    num_heads: 4    # Keep at 4
     dropout: 0.1
+    pyramid_scales: [4, 2, 1]  # Process at 12km, 6km, 3km resolutions
+    use_edge_features: true    # FIX-Pyramid: Keep enabled since pyramid handles memory
+    graph_connectivity: "grid_8"  # FIX-Pyramid: Keep 8-connectivity for full spatial relationships
+  # FIX-Pyramid-END
     
   transformer:
     type: "LightweightTransformer"
-    hidden_dim: 64  # FIX: Reduce from 128 to 64 to save GPU memory
-    num_layers: 3   # FIX: Reduce from 4 to 3
-    num_heads: 4    # FIX: Reduce from 8 to 4
+    hidden_dim: 64  # Keep at 64 to save memory
+    num_layers: 3   # Keep at 3
+    num_heads: 4    # Keep at 4
     dropout: 0.1
     attention_type: "linear"
     

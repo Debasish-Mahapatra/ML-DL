@@ -7,6 +7,8 @@ from .gnn import GraphNeuralNetwork, LightningGNN, PyramidGraphNeuralNetwork
 # FIX-Pyramid-END
 from .transformer import LightweightTransformer, SpatialTransformer
 from .prediction_head import PredictionHead, MultiScalePredictionHead
+# ADD THIS LINE:
+from .efficient_convnet import EfficientConvNet, MultiScaleConvNet
 
 __all__ = [
     "GraphNeuralNetwork",
@@ -15,5 +17,8 @@ __all__ = [
     "LightweightTransformer",
     "SpatialTransformer",
     "PredictionHead",
-    "MultiScalePredictionHead"
+    "MultiScalePredictionHead",
+    # ADD THESE TWO LINES:
+    "EfficientConvNet",
+    "MultiScaleConvNet"
 ]

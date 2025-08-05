@@ -10,9 +10,9 @@ set -e  # Exit on any error
 # =============================================================================
 
 # Paths (MODIFY THESE FOR YOUR SYSTEM)
-LIGHTNING_DIR="/mnt/scratch/lightning_prediction/data/input-LP/observed_lightning/"
-CAPE_FILE="/mnt/scratch/lightning_prediction/data/input-LP/cape/cape-2019-2022.nc"
-TERRAIN_FILE="/mnt/scratch/lightning_prediction/data/input-LP/terrain/terrain_lonlat.nc"
+LIGHTNING_DIR="/data/gent/vo/002/gvo00202/vsc46275/lightning_prediction/data/input-LP/observed_lightning/"
+CAPE_FILE="/data/gent/vo/002/gvo00202/vsc46275/lightning_prediction/data/input-LP/cape/cape-2019-2022.nc"
+TERRAIN_FILE="/data/gent/vo/002/gvo00202/vsc46275/lightning_prediction/data/input-LP/terrain/terrain_lonlat.nc"
 
 # Project directories
 PROJECT_ROOT="$(pwd)"

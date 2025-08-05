@@ -22,7 +22,7 @@ training:
     T_mult: 2
     eta_min: 1e-6
     
-# Loss
+  # Loss
   loss:
     type: "composite"
     primary: "focal"
@@ -39,12 +39,12 @@ training:
   precision: 32
   
   # Memory Optimization
-  gradient_accumulation_steps: 16  # FIX: Increase from 4 to 8 to compensate for smaller batch
+  gradient_accumulation_steps: 8  # FIX: Increase from 4 to 16 to compensate for smaller batch
   max_grad_norm: 1.0
   
-  # Reproducibility
+  # Reproducibility - FIXED: Disable strict determinism to avoid CUDA issues
   seed: 42
-  deterministic: true
+  deterministic: false  # FIXED: Changed from true to false to fix adaptive_max_pool2d error
   
   # Logging
   log_every_n_steps: 50

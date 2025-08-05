@@ -38,22 +38,22 @@ model:
       upsampling_factor: 8.33
       guidance_weight: 0.3
       
-  # Core Processing
-  # FIX-Pyramid-START: Updated GNN config for Pyramid processing
-  gnn:
-    type: "PyramidGraphNeuralNetwork"  # Changed from GraphAttentionNetwork
-    hidden_dim: 64  # Keep at 64 to save memory
-    num_layers: 2   # Keep at 2
-    num_heads: 4    # Keep at 4
+  # Core Processing - MODIFIED: Replaced Pyramid GNN with Efficient ConvNet
+  gnn:  # Keep same config name for compatibility
+    type: "EfficientConvNet"  # CHANGED: From PyramidGraphNeuralNetwork to EfficientConvNet
+    hidden_dim: 64  # Keep at 64 for memory efficiency
+    num_layers: 3   # INCREASED: From 2 to 3 for better feature extraction
+    num_heads: 4    # Keep for transformer compatibility
     dropout: 0.1
-    pyramid_scales: [4, 2, 1]  # Process at 12km, 6km, 3km resolutions
-    use_edge_features: true    # FIX-Pyramid: Keep enabled since pyramid handles memory
-    graph_connectivity: "grid_8"  # FIX-Pyramid: Keep 8-connectivity for full spatial relationships
-  # FIX-Pyramid-END
+    # REMOVED: pyramid_scales, use_edge_features, graph_connectivity (GNN-specific)
+    # ADDED: ConvNet-specific parameters
+    kernel_sizes: [3, 5, 7]  # Multi-scale convolution kernels
+    use_multiscale: true     # Enable multi-scale feature fusion
+    use_attention: true      # Enable channel attention
     
   transformer:
     type: "LightweightTransformer"
-    hidden_dim: 64  # Keep at 64 to save memory
+    hidden_dim: 64  # Keep at 64 for memory efficiency
     num_layers: 3   # Keep at 3
     num_heads: 4    # Keep at 4
     dropout: 0.1

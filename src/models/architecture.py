@@ -11,7 +11,8 @@ from omegaconf import DictConfig
 
 from .encoders import CAPEEncoder, TerrainEncoder, ERA5Encoder
 from .fusion import MeteorologicalFusion, MultiScaleFusion
-from .components import GraphNeuralNetwork, LightweightTransformer, PredictionHead
+# MODIFIED: Added EfficientConvNet import
+from .components import GraphNeuralNetwork, LightweightTransformer, PredictionHead, EfficientConvNet
 from .domain_adaptation import DomainAdapter
 
 class LightningPredictor(nn.Module):
@@ -20,7 +21,7 @@ class LightningPredictor(nn.Module):
     
     Architecture Flow:
     Input Data → Encoders → Meteorological Fusion → Multi-Scale Fusion → 
-    GNN → Transformer → Prediction Head → Lightning Probability
+    EfficientConvNet → Transformer → Prediction Head → Lightning Probability
     
     With Domain Adaptation and Physics Constraints integrated throughout.
     """
@@ -121,24 +122,25 @@ class LightningPredictor(nn.Module):
         print(f"   ✓ Fusion modules built (Output: {self.fusion_output_channels}ch)")
     
     def _build_core_processing(self):
-        """Build core processing components (GNN + Transformer)."""
+        """Build core processing components (EfficientConvNet + Transformer)."""
         
-        # Graph Neural Network
-        gnn_config = self.model_config.gnn
-        self.gnn = GraphNeuralNetwork(
+        # MODIFIED: Replace Graph Neural Network with Efficient ConvNet
+        convnet_config = self.model_config.gnn  # Keep same config section name for compatibility
+        self.spatial_processor = EfficientConvNet(
             input_channels=self.fusion_output_channels,
-            hidden_channels=gnn_config.hidden_dim,
-            output_channels=gnn_config.hidden_dim,
-            num_layers=gnn_config.num_layers,
-            gnn_type=gnn_config.type,
-            num_heads=gnn_config.num_heads,
-            dropout=gnn_config.dropout
+            hidden_channels=convnet_config.hidden_dim,
+            output_channels=convnet_config.hidden_dim,
+            num_layers=convnet_config.num_layers,
+            kernel_sizes=[3, 5, 7],  # Multi-scale kernels
+            dropout=convnet_config.dropout,
+            use_multiscale=True,
+            use_attention=True
         )
         
-        # Lightweight Transformer
+        # Lightweight Transformer (unchanged)
         transformer_config = self.model_config.transformer
         self.transformer = LightweightTransformer(
-            input_channels=gnn_config.hidden_dim,
+            input_channels=convnet_config.hidden_dim,  # Input from ConvNet
             hidden_dim=transformer_config.hidden_dim,
             num_layers=transformer_config.num_layers,
             num_heads=transformer_config.num_heads,
@@ -146,7 +148,7 @@ class LightningPredictor(nn.Module):
             attention_type=transformer_config.attention_type
         )
         
-        print(f"   ✓ Core processing built (GNN: {gnn_config.hidden_dim}ch, "
+        print(f"   ✓ Core processing built (ConvNet: {convnet_config.hidden_dim}ch, "
               f"Transformer: {transformer_config.hidden_dim}ch)")
     
     def _build_prediction_head(self):
@@ -228,11 +230,11 @@ class LightningPredictor(nn.Module):
         else:
             processing_features = fused_features
         
-        # Step 5: Core processing - GNN for spatial relationships
-        gnn_features = self.gnn(processing_features)
+        # Step 5: Core processing - EfficientConvNet for spatial relationships
+        convnet_features = self.spatial_processor(processing_features)
         
         # Step 6: Core processing - Transformer for patterns
-        transformer_features = self.transformer(gnn_features)
+        transformer_features = self.transformer(convnet_features)
         
         # Step 7: Lightning prediction
         lightning_prediction = self.prediction_head(transformer_features)
@@ -244,7 +246,7 @@ class LightningPredictor(nn.Module):
             'terrain_features': terrain_features,
             'meteorological_features': meteorological_features,
             'fused_features': fused_features,
-            'gnn_features': gnn_features,
+            'convnet_features': convnet_features,  # MODIFIED: Changed from gnn_features
             'transformer_features': transformer_features
         }
         
@@ -325,7 +327,7 @@ class LightningPredictor(nn.Module):
                 'terrain_encoder': self.terrain_encoder.embedding_dim,
                 'era5_encoder': self.era5_encoder.output_channels if self.era5_encoder else 0,
                 'fusion_output': self.fusion_output_channels,
-                'gnn_hidden': self.model_config.gnn.hidden_dim,
+                'convnet_hidden': self.model_config.gnn.hidden_dim,  # MODIFIED: Changed from gnn_hidden
                 'transformer_hidden': self.model_config.transformer.hidden_dim,
                 'prediction_output': self.model_config.prediction_head.output_dim
             }

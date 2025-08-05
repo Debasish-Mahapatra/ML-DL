@@ -25,6 +25,7 @@ class LightningTrainer(pl.LightningModule):
     """
     PyTorch Lightning trainer for lightning prediction with physics constraints,
     memory optimization, and domain adaptation support.
+    Now optimized for EfficientConvNet architecture.
     """
     
     def __init__(self, config: DictConfig):
@@ -86,6 +87,7 @@ class LightningTrainer(pl.LightningModule):
         
         print(f"Lightning Trainer initialized:")
         print(f"  - Model parameters: {sum(p.numel() for p in self.model.parameters()):,}")
+        print(f"  - Architecture: EfficientConvNet + Transformer")  # UPDATED
         print(f"  - Gradient accumulation: {self.gradient_accumulation_steps} steps")
         print(f"  - Domain adaptation: {self.domain_adaptation_enabled}")
         print(f"  - Physics loss weight: {self.physics_loss_weight}")
@@ -380,7 +382,9 @@ class LightningTrainer(pl.LightningModule):
         return {
             'predictions': outputs['lightning_prediction'],
             'cape_features': outputs.get('cape_features'),
-            'terrain_features': outputs.get('terrain_features')
+            'terrain_features': outputs.get('terrain_features'),
+            # UPDATED: Changed from gnn_features to convnet_features
+            'convnet_features': outputs.get('convnet_features')
         }
     
     def on_fit_start(self):
@@ -398,6 +402,9 @@ class LightningTrainer(pl.LightningModule):
         # Enable domain adaptation after warmup
         if self.domain_adaptation_enabled:
             logger.info(f"Domain adaptation will be enabled after epoch {self.domain_adaptation_warmup}")
+        
+        # ADDED: Log architecture change
+        logger.info("Using EfficientConvNet architecture (replacing PyramidGNN for better performance)")
     
     def _compute_class_weights(self):
         """Compute class weights from training data."""
@@ -450,6 +457,7 @@ class LightningTrainer(pl.LightningModule):
 class DomainAdaptationTrainer(LightningTrainer):
     """
     Specialized trainer for domain adaptation from Odisha to other regions.
+    Now optimized for EfficientConvNet architecture.
     """
     
     def __init__(self, config: DictConfig, source_checkpoint: Optional[str] = None):

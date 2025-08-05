@@ -1,0 +1,43 @@
+#!/bin/bash
+
+#PBS -N lightning_train_test1
+#PBS -o output.log
+#PBS -e error.log
+#PBS -l walltime=4:00:00
+#PBS -l nodes=1:ppn=18:gpus=1
+#PBS -l mem=64gb
+
+# Print job information
+echo "========================================================="
+echo "Starting job on node $(hostname)"
+echo "Job ID: $PBS_JOBID"
+echo "Submitted from directory: $PBS_O_WORKDIR"
+echo "========================================================="
+echo
+
+# Navigate to working directory
+cd $PBS_O_WORKDIR
+
+# Load required modules
+module load CUDA/12.1.1
+module load GCC/12.3.0
+
+# Activate virtual environment
+source /data/gent/vo/002/gvo00202/vsc46275/lightning_venv/bin/activate
+
+# Verify Python environment
+echo "Verifying Python environment..."
+python -c "import torch; print(f'PyTorch: {torch.__version__}')"
+python -c "import pytorch_lightning as pl; print(f'PyTorch Lightning: {pl.__version__}')"
+python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+echo "Python environment verified."
+echo
+
+# Run training script
+echo "Starting the lightning prediction training script..."
+./run_lightning_prediction.sh --skip-preprocess
+
+echo
+echo "========================================================="
+echo "Job finished."
+echo "========================================================="

@@ -39,7 +39,7 @@ training:
   precision: 32  # Keep same - maintain precision 32
   
   # Memory Optimization
-  gradient_accumulation_steps: 8  # Keep same for now
+  gradient_accumulation_steps: 4  # Keep same for now
   max_grad_norm: 1.0
   
   # Reproducibility

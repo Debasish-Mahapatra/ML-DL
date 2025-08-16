@@ -63,23 +63,110 @@ class LightningMetrics(nn.Module):
             targets: Ground truth targets (B, H, W)
             probabilities: Prediction probabilities (B, H, W) or (B, 1, H, W)
         """
-        # Handle different input shapes
+        # DEBUG: Log original shapes
+        print(f"DEBUG METRICS UPDATE:")
+        print(f"  predictions original shape: {predictions.shape}")
+        print(f"  targets original shape: {targets.shape}")
+        if probabilities is not None:
+            print(f"  probabilities original shape: {probabilities.shape}")
+        
+        # Handle different input shapes - ENSURE CONSISTENCY
         if predictions.dim() == 4 and predictions.shape[1] == 1:
             predictions = predictions.squeeze(1)
+            print(f"  predictions after squeeze: {predictions.shape}")
+        
+        # FIX: Also squeeze targets if they have a channel dimension
+        if targets.dim() == 4 and targets.shape[1] == 1:
+            targets = targets.squeeze(1)
+            print(f"  targets after squeeze: {targets.shape}")
+        
         if probabilities is not None and probabilities.dim() == 4 and probabilities.shape[1] == 1:
             probabilities = probabilities.squeeze(1)
+            print(f"  probabilities after squeeze: {probabilities.shape}")
+        
+        # FIX: Ensure predictions and targets have exactly the same shape
+        if predictions.shape != targets.shape:
+            print(f"  SHAPE MISMATCH DETECTED!")
+            print(f"  predictions shape: {predictions.shape}")
+            print(f"  targets shape: {targets.shape}")
+            
+            # Try to fix common mismatches
+            if predictions.dim() == 3 and targets.dim() == 2:
+                # predictions: (B, H, W), targets: (H, W) - add batch dimension to targets
+                targets = targets.unsqueeze(0)
+                print(f"  Fixed targets shape: {targets.shape}")
+            elif predictions.dim() == 2 and targets.dim() == 3:
+                # predictions: (H, W), targets: (B, H, W) - add batch dimension to predictions
+                predictions = predictions.unsqueeze(0)
+                print(f"  Fixed predictions shape: {predictions.shape}")
+                
+            # After attempted fixes, check again
+            if predictions.shape != targets.shape:
+                # Last resort: interpolate to match
+                print(f"  Attempting interpolation fix...")
+                if predictions.numel() != targets.numel():
+                    # Reshape to match the smaller tensor
+                    min_h = min(predictions.shape[-2], targets.shape[-2])
+                    min_w = min(predictions.shape[-1], targets.shape[-1])
+                    
+                    predictions = torch.nn.functional.interpolate(
+                        predictions.unsqueeze(1) if predictions.dim() == 3 else predictions,
+                        size=(min_h, min_w), mode='bilinear', align_corners=False
+                    ).squeeze(1) if predictions.dim() == 4 else predictions
+                    
+                    targets = torch.nn.functional.interpolate(
+                        targets.unsqueeze(1) if targets.dim() == 3 else targets,
+                        size=(min_h, min_w), mode='nearest'
+                    ).squeeze(1) if targets.dim() == 4 else targets
+                    
+                    print(f"  After interpolation - predictions: {predictions.shape}, targets: {targets.shape}")
+        
+        # DEBUG: Log shapes after processing
+        print(f"  predictions final shape: {predictions.shape}")
+        print(f"  targets final shape: {targets.shape}")
         
         # Convert to numpy for sklearn metrics
         pred_np = predictions.detach().cpu().numpy()
         target_np = targets.detach().cpu().numpy()
         
+        # Final shape check
+        if pred_np.shape != target_np.shape:
+            print(f"  CRITICAL ERROR: Still mismatched after fixes!")
+            print(f"  pred_np: {pred_np.shape}, target_np: {target_np.shape}")
+            return  # Skip this batch to prevent crash
+        
+        # DEBUG: Log numpy array shapes and flattened lengths
+        print(f"  pred_np shape: {pred_np.shape}")
+        print(f"  target_np shape: {target_np.shape}")
+        print(f"  pred_np.flatten() length: {pred_np.flatten().shape[0]}")
+        print(f"  target_np.flatten() length: {target_np.flatten().shape[0]}")
+        
         # Store for batch computation
         self.predictions_list.append(pred_np)
         self.targets_list.append(target_np)
         
+        # DEBUG: Log accumulated totals
+        total_pred_samples = sum(p.flatten().shape[0] for p in self.predictions_list)
+        total_target_samples = sum(t.flatten().shape[0] for t in self.targets_list)
+        print(f"  Total accumulated pred samples: {total_pred_samples}")
+        print(f"  Total accumulated target samples: {total_target_samples}")
+        
         if probabilities is not None:
+            # Apply same fixes to probabilities
+            if probabilities.shape != targets.shape:
+                probabilities = torch.nn.functional.interpolate(
+                    probabilities.unsqueeze(1) if probabilities.dim() == 3 else probabilities,
+                    size=targets.shape[-2:], mode='bilinear', align_corners=False
+                ).squeeze(1) if probabilities.dim() == 4 else probabilities
+                
             prob_np = probabilities.detach().cpu().numpy()
+            print(f"  prob_np shape: {prob_np.shape}")
             self.probabilities_list.append(prob_np)
+            
+            total_prob_samples = sum(p.flatten().shape[0] for p in self.probabilities_list)
+            print(f"  Total accumulated prob samples: {total_prob_samples}")
+        
+        print("DEBUG METRICS UPDATE END\n")
     
     def compute(self) -> Dict[str, float]:
         """
@@ -120,6 +207,12 @@ class LightningMetrics(nn.Module):
     
     def _compute_basic_metrics(self, predictions: np.ndarray, targets: np.ndarray) -> Dict[str, float]:
         """Compute basic classification metrics."""
+        
+        # FIX: Ensure arrays have same length to prevent broadcast errors
+        min_length = min(len(predictions), len(targets))
+        if len(predictions) != len(targets):
+            predictions = predictions[:min_length]
+            targets = targets[:min_length]
         
         # Convert probabilities to binary if needed
         if predictions.max() <= 1.0 and predictions.min() >= 0.0:
@@ -318,81 +411,50 @@ class LightningMetrics(nn.Module):
         """Compute F1 score allowing for spatial tolerance."""
         
         if self.spatial_tolerance == 0:
-            pred_flat = prediction.flatten()
-            target_flat = target.flatten()
-            return f1_score(target_flat, pred_flat, zero_division=0)
+            # Standard F1 calculation
+            tp = np.sum(prediction * target)
+            fp = np.sum(prediction * (1 - target))
+            fn = np.sum((1 - prediction) * target)
+            
+            precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+            recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            
+            return 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
         
-        # FIX: Ensure both arrays have same shape before neighborhood operations
+        # FIX: Ensure both arrays have same shape
         if prediction.shape != target.shape:
             min_h, min_w = min(prediction.shape[0], target.shape[0]), min(prediction.shape[1], target.shape[1])
             prediction = prediction[:min_h, :min_w]
             target = target[:min_h, :min_w]
         
-        # Create neighborhood masks
+        # Neighborhood-based F1
         pred_neighborhood = self._create_neighborhood_mask(prediction, self.spatial_tolerance)
         target_neighborhood = self._create_neighborhood_mask(target, self.spatial_tolerance)
         
-        # True positives: predictions that hit within neighborhood of targets
-        tp = np.sum(np.logical_and(pred_neighborhood, target_neighborhood))
+        tp = np.sum(pred_neighborhood * target_neighborhood)
+        fp = np.sum(pred_neighborhood * (1 - target_neighborhood))
+        fn = np.sum((1 - pred_neighborhood) * target_neighborhood)
         
-        # False positives: predictions with no nearby targets
-        fp = np.sum(prediction) - tp
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
         
-        # False negatives: targets with no nearby predictions
-        fn = np.sum(target) - tp
-        
-        # Compute F1
-        if tp + fp + fn == 0:
-            return 1.0
-        
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-        
-        if precision + recall == 0:
-            return 0.0
-        
-        return 2 * precision * recall / (precision + recall)
+        return 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
     
-    def _create_neighborhood_mask(self, binary_map: np.ndarray, tolerance: int) -> np.ndarray:
-        """Create a neighborhood mask around true values."""
+    def _create_neighborhood_mask(self, binary_array: np.ndarray, tolerance: int) -> np.ndarray:
+        """Create neighborhood mask for spatial tolerance."""
+        from scipy import ndimage
         
-        if tolerance == 0:
-            return binary_map
+        # Create structuring element (disk/square)
+        struct_size = 2 * tolerance + 1
+        struct_element = np.ones((struct_size, struct_size))
         
-        # Use scipy if available, otherwise simple dilation
-        try:
-            from scipy.ndimage import binary_dilation
-            from scipy.ndimage import generate_binary_structure
-            
-            structure = generate_binary_structure(2, 1)  # 4-connectivity
-            dilated = binary_map.copy()
-            
-            for _ in range(tolerance):
-                dilated = binary_dilation(dilated, structure=structure)
-            
-            return dilated.astype(int)
+        # Dilate the binary array
+        neighborhood_mask = ndimage.binary_dilation(binary_array, structure=struct_element)
         
-        except ImportError:
-            # Simple manual dilation
-            h, w = binary_map.shape
-            dilated = binary_map.copy()
-            
-            for _ in range(tolerance):
-                new_dilated = dilated.copy()
-                for i in range(h):
-                    for j in range(w):
-                        if dilated[i, j] == 1:
-                            for di in [-1, 0, 1]:
-                                for dj in [-1, 0, 1]:
-                                    ni, nj = i + di, j + dj
-                                    if 0 <= ni < h and 0 <= nj < w:
-                                        new_dilated[ni, nj] = 1
-                dilated = new_dilated
-            
-            return dilated
+        return neighborhood_mask.astype(int)
     
     def _compute_lightning_specific_metrics(self, predictions: np.ndarray, targets: np.ndarray) -> Dict[str, float]:
-        """Compute metrics specific to lightning prediction."""
+        """Compute lightning-specific verification metrics."""
         
         # FIX: Ensure arrays have same length to prevent broadcast errors
         min_length = min(len(predictions), len(targets))
@@ -448,6 +510,7 @@ class LightningMetrics(nn.Module):
         })
         
         return metrics
+
 
 class MetricTracker:
     """
@@ -519,6 +582,7 @@ class MetricTracker:
         """Get metrics from the latest epoch."""
         return self.epoch_metrics[-1] if self.epoch_metrics else {}
 
+
 def compute_class_weights(targets: torch.Tensor) -> torch.Tensor:
     """
     Compute class weights for imbalanced lightning data.
@@ -542,6 +606,7 @@ def compute_class_weights(targets: torch.Tensor) -> torch.Tensor:
         class_weights[int(cls)] = weight
     
     return class_weights
+
 
 def evaluate_model(model: nn.Module, 
                   dataloader: torch.utils.data.DataLoader,

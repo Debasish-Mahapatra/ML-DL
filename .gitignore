@@ -41,3 +41,4 @@ Untitled*.ipynb
 error.log
 output.log
 experiments/
+checkpoints/

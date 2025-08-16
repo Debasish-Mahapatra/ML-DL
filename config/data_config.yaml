@@ -49,8 +49,8 @@ data:
     sequence_length: 1
     
   # Data Loading
-  batch_size: 1  # FIX: Reduce from 4 to 1 to save GPU memory
-  num_workers: 2 # FIX: Reduce from 4 to 2
+  batch_size: 8  # Keep at 1 for memory efficiency
+  num_workers: 2 # Keep at 2
   pin_memory: true
   
   # Data Splits

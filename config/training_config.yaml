@@ -12,7 +12,7 @@ training:
   # Optimizer
   optimizer:
     type: "AdamW"
-    lr: 1e-5  # FIX: Reduce learning rate from 1e-4 to 1e-5 to prevent NaN loss
+    lr: 1e-5  # Keep same - reduced learning rate from 1e-4 to 1e-5
     weight_decay: 1e-5
     
   # Scheduler
@@ -28,23 +28,23 @@ training:
     primary: "focal"
     physics_weight: 0.02
     charge_separation_weight: 0.01
-    microphysics_weight: 0.01  # FIX: Enable with low weight (will be zero without temperature data)
+    microphysics_weight: 0.01  # Keep same - will be zero without temperature data
     terrain_consistency_weight: 0.005
-    adaptive_weights: true  # FIX: Enable adaptive tuning
-    adaptive_weighting: true  # FIX: Enable adaptive main/physics balance
+    adaptive_weights: true  # Keep same - adaptive tuning enabled
+    adaptive_weighting: true  # Keep same - adaptive main/physics balance
     
   # Hardware
   accelerator: "gpu"
   devices: 1
-  precision: 32
+  precision: 32  # Keep same - maintain precision 32
   
   # Memory Optimization
-  gradient_accumulation_steps: 8  # FIX: Increase from 4 to 16 to compensate for smaller batch
+  gradient_accumulation_steps: 8  # Keep same for now
   max_grad_norm: 1.0
   
-  # Reproducibility - FIXED: Disable strict determinism to avoid CUDA issues
+  # Reproducibility
   seed: 42
-  deterministic: false  # FIXED: Changed from true to false to fix adaptive_max_pool2d error
+  deterministic: false  # Keep same - disabled to avoid CUDA issues
   
   # Logging
   log_every_n_steps: 50

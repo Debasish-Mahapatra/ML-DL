@@ -19,6 +19,9 @@ from ..models.architecture import LightningPredictor
 from .loss_functions import CompositeLoss, create_loss_function
 from .metrics import LightningMetrics, MetricTracker, compute_class_weights
 
+# MEMORY TRACKING IMPORTS - NEW ADDITION
+from ..utils.memory_tracker import memory_checkpoint, trace_memory_line, MemoryContext
+
 logger = logging.getLogger(__name__)
 
 class LightningTrainer(pl.LightningModule):
@@ -107,7 +110,6 @@ class LightningTrainer(pl.LightningModule):
         # FIX: Make optimizer type comparison case-insensitive
         optimizer_type = optimizer_config.type.lower()
         
-        
         if optimizer_type == "adamw":  # FIX: Changed from optimizer_config.type == "adamw"
             optimizer = AdamW(
                 self.parameters(),
@@ -129,29 +131,15 @@ class LightningTrainer(pl.LightningModule):
         # Learning rate scheduler
         scheduler_config = self.training_config.scheduler
         
-        
         # FIX: Make scheduler type comparison case-insensitive and handle different naming
         scheduler_type = scheduler_config.type.lower()
-        
         
         if scheduler_type in ["cosine", "cosineannelingwarmrestarts"]:  # FIX: Changed from scheduler_config.type == "cosine"
             scheduler = CosineAnnealingWarmRestarts(
                 optimizer,
                 T_0=int(scheduler_config.T_0),  # FIX: Ensure integer
                 T_mult=int(getattr(scheduler_config, 'T_mult', 2)),  # FIX: Ensure integer
-                eta_min=float(scheduler_config.eta_min)  # FIX: Ensure floatn
-            )
-            lr_scheduler_config = {
-                "scheduler": scheduler,
-                "interval": "step"
-            }
-        elif scheduler_type == "onecycle":  # FIX: Changed from scheduler_config.type == "onecycle"
-            scheduler = OneCycleLR(
-                optimizer,
-                max_lr=optimizer_config.lr,
-                total_steps=self.trainer.estimated_stepping_batches,
-                pct_start=float(getattr(scheduler_config, 'pct_start', 0.3)),  # FIX: Ensure float
-                anneal_strategy=getattr(scheduler_config, 'anneal_strategy', 'cos')
+                eta_min=float(scheduler_config.eta_min)  # FIX: Ensure float
             )
             lr_scheduler_config = {
                 "scheduler": scheduler,
@@ -177,15 +165,20 @@ class LightningTrainer(pl.LightningModule):
             "optimizer": optimizer,
             "lr_scheduler": lr_scheduler_config
         }
-        
+    
+    @memory_checkpoint("TRAINING_STEP")
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Training step with gradient accumulation and physics constraints."""
         
+        trace_memory_line()  # Start of training step
+        
         # Extract batch data
-        cape_data = batch['cape']
-        terrain_data = batch['terrain']
-        lightning_targets = batch['lightning']
-        era5_data = batch.get('era5', None)
+        with MemoryContext("BATCH_DATA_EXTRACT"):
+            cape_data = batch['cape']
+            terrain_data = batch['terrain']
+            lightning_targets = batch['lightning']
+            era5_data = batch.get('era5', None)
+        trace_memory_line()  # After batch data extraction
         
         # Determine if domain adaptation should be active
         domain_adaptation_active = (
@@ -194,21 +187,25 @@ class LightningTrainer(pl.LightningModule):
         )
         
         # Forward pass
-        outputs = self.model(
-            cape_data, terrain_data, era5_data,
-            domain_adaptation=domain_adaptation_active
-        )
-        predictions = outputs['lightning_prediction']
+        with MemoryContext("FORWARD_PASS"):
+            outputs = self.model(
+                cape_data, terrain_data, era5_data,
+                domain_adaptation=domain_adaptation_active
+            )
+            predictions = outputs['lightning_prediction']
+        trace_memory_line()  # After forward pass
         
         # Compute loss with physics constraints
-        if isinstance(self.loss_function, CompositeLoss):
-            loss_dict = self.loss_function(
-                predictions, lightning_targets, cape_data, terrain_data
-            )
-            total_loss = loss_dict['total_loss']
-        else:
-            total_loss = self.loss_function(predictions, lightning_targets)
-            loss_dict = {'total_loss': total_loss, 'main_loss': total_loss}
+        with MemoryContext("LOSS_COMPUTATION"):
+            if isinstance(self.loss_function, CompositeLoss):
+                loss_dict = self.loss_function(
+                    predictions, lightning_targets, cape_data, terrain_data
+                )
+                total_loss = loss_dict['total_loss']
+            else:
+                total_loss = self.loss_function(predictions, lightning_targets)
+                loss_dict = {'total_loss': total_loss, 'main_loss': total_loss}
+        trace_memory_line()  # After loss computation
         
         # FIX: Add NaN detection and emergency stop
         if torch.isnan(total_loss) or torch.isinf(total_loss):
@@ -220,11 +217,13 @@ class LightningTrainer(pl.LightningModule):
             return torch.tensor(0.1, requires_grad=True, device=predictions.device)
         
         # Update metrics
-        with torch.no_grad():
-            # FIX: Convert logits to probabilities and binary predictions to avoid shape mismatch in metrics computation
-            probabilities = torch.sigmoid(predictions)
-            binary_predictions = (probabilities > 0.5).float()
-            self.train_metrics.update(binary_predictions, lightning_targets, probabilities)
+        with MemoryContext("METRICS_UPDATE"):
+            with torch.no_grad():
+                # FIX: Convert logits to probabilities and binary predictions to avoid shape mismatch in metrics computation
+                probabilities = torch.sigmoid(predictions)
+                binary_predictions = (probabilities > 0.5).float()
+                self.train_metrics.update(binary_predictions, lightning_targets, probabilities)
+        trace_memory_line()  # After metrics update
         
         # Log losses
         self.log('train_loss', total_loss, on_step=True, on_epoch=True, prog_bar=True)
@@ -238,48 +237,60 @@ class LightningTrainer(pl.LightningModule):
         current_lr = self.optimizers().param_groups[0]['lr']
         self.log('learning_rate', current_lr, on_step=True)
         
+        trace_memory_line()  # End of training step
+        
         # FIX: Return total_loss directly for automatic optimization
         return total_loss
-        
     
+    @memory_checkpoint("VALIDATION_STEP")
     def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
-        """Validation step."""
+        """Validation step with memory tracking."""
+        
+        trace_memory_line()  # Start of validation step
         
         # Extract batch data
-        cape_data = batch['cape']
-        terrain_data = batch['terrain']
-        lightning_targets = batch['lightning']
-        era5_data = batch.get('era5', None)
+        with MemoryContext("VAL_BATCH_DATA_EXTRACT"):
+            cape_data = batch['cape']
+            terrain_data = batch['terrain']
+            lightning_targets = batch['lightning']
+            era5_data = batch.get('era5', None)
+        trace_memory_line()  # After batch data extraction
         
         # Forward pass
-        outputs = self.model(cape_data, terrain_data, era5_data, domain_adaptation=False)
-        predictions = outputs['lightning_prediction']
+        with MemoryContext("VAL_FORWARD_PASS"):
+            outputs = self.model(cape_data, terrain_data, era5_data, domain_adaptation=False)
+            predictions = outputs['lightning_prediction']
+        trace_memory_line()  # After forward pass
         
         # Compute loss
-        if isinstance(self.loss_function, CompositeLoss):
-            loss_dict = self.loss_function(
-                predictions, lightning_targets, cape_data, terrain_data
-            )
-            total_loss = loss_dict['total_loss']
-        else:
-            total_loss = self.loss_function(predictions, lightning_targets)
+        with MemoryContext("VAL_LOSS_COMPUTATION"):
+            if isinstance(self.loss_function, CompositeLoss):
+                loss_dict = self.loss_function(
+                    predictions, lightning_targets, cape_data, terrain_data
+                )
+                total_loss = loss_dict['total_loss']
+            else:
+                total_loss = self.loss_function(predictions, lightning_targets)
+        trace_memory_line()  # After loss computation
         
         # Update metrics
-        with torch.no_grad():
-            # FIX: Convert logits to probabilities and binary predictions to avoid shape mismatch in metrics computation
-            probabilities = torch.sigmoid(predictions)
-            binary_predictions = (probabilities > 0.5).float()
-            self.val_metrics.update(binary_predictions, lightning_targets, probabilities)
+        with MemoryContext("VAL_METRICS_UPDATE"):
+            with torch.no_grad():
+                probabilities = torch.sigmoid(predictions)
+                binary_predictions = (probabilities > 0.5).float()
+                self.val_metrics.update(binary_predictions, lightning_targets, probabilities)
+        trace_memory_line()  # After metrics update
         
-        # Log validation loss
-        self.log('val_loss', total_loss, on_epoch=True, prog_bar=True)
+        # Log losses
+        self.log('val_loss', total_loss, on_step=False, on_epoch=True, prog_bar=True)
+        
+        trace_memory_line()  # End of validation step
         
         return total_loss
     
     def test_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Test step."""
         
-        # Extract batch data
         cape_data = batch['cape']
         terrain_data = batch['terrain']
         lightning_targets = batch['lightning']
@@ -300,49 +311,68 @@ class LightningTrainer(pl.LightningModule):
         
         # Update metrics
         with torch.no_grad():
-            # FIX: Convert logits to probabilities and binary predictions to avoid shape mismatch in metrics computation
             probabilities = torch.sigmoid(predictions)
             binary_predictions = (probabilities > 0.5).float()
             self.test_metrics.update(binary_predictions, lightning_targets, probabilities)
         
+        # Log losses
+        self.log('test_loss', total_loss, on_step=False, on_epoch=True)
+        
         return total_loss
     
-    def on_train_epoch_end(self):
-        """Called at the end of training epoch."""
+    @memory_checkpoint("TRAINING_EPOCH_END")
+    def on_training_epoch_end(self):
+        """Called at the end of training epoch with memory tracking."""
+        
+        trace_memory_line()  # Start of epoch end
         
         # Compute and log training metrics
-        train_metrics = self.train_metrics.compute()
+        with MemoryContext("TRAIN_METRICS_COMPUTE"):
+            train_metrics = self.train_metrics.compute()
+        trace_memory_line()  # After metrics computation
         
         for metric_name, metric_value in train_metrics.items():
             self.log(f'train_{metric_name}', metric_value, on_epoch=True)
         
-        # Reset metrics
-        self.train_metrics.reset()
+        with MemoryContext("TRAIN_METRICS_RESET"):
+            self.train_metrics.reset()
+        trace_memory_line()  # After metrics reset
         
         # Reset accumulation step counter
         self.current_accumulation_step = 0
         
         # FIX-Memory-START: Force GPU memory cleanup after training epoch
         if torch.cuda.is_available():
+            trace_memory_line()  # Before GPU cleanup
             torch.cuda.empty_cache()
             gc.collect()
+            trace_memory_line()  # After GPU cleanup
             print(f"   GPU memory cleared after training epoch {self.current_epoch}")
         # FIX-Memory-END
     
+    @memory_checkpoint("VALIDATION_EPOCH_END")
     def on_validation_epoch_end(self):
-        """Called at the end of validation epoch."""
+        """Called at the end of validation epoch with memory tracking."""
+        
+        trace_memory_line()  # Start of validation epoch end
         
         # Compute and log validation metrics
-        val_metrics = self.val_metrics.compute()
+        with MemoryContext("VAL_METRICS_COMPUTE"):
+            val_metrics = self.val_metrics.compute()
+        trace_memory_line()  # After metrics computation
         
         for metric_name, metric_value in val_metrics.items():
             self.log(f'val_{metric_name}', metric_value, on_epoch=True, prog_bar=(metric_name == 'f1_score'))
         
         # Track metrics
-        self.metric_tracker.update(self.current_epoch, val_metrics)
+        with MemoryContext("METRIC_TRACKER_UPDATE"):
+            self.metric_tracker.update(self.current_epoch, val_metrics)
+        trace_memory_line()  # After metric tracking
         
         # Reset metrics
-        self.val_metrics.reset()
+        with MemoryContext("VAL_METRICS_RESET"):
+            self.val_metrics.reset()
+        trace_memory_line()  # After metrics reset
         
         # Log best metrics so far
         best_metrics = self.metric_tracker.get_best_metrics()
@@ -351,8 +381,10 @@ class LightningTrainer(pl.LightningModule):
         
         # FIX-Memory-START: Force GPU memory cleanup after validation epoch
         if torch.cuda.is_available():
+            trace_memory_line()  # Before GPU cleanup
             torch.cuda.empty_cache()
             gc.collect()
+            trace_memory_line()  # After GPU cleanup
             print(f"   GPU memory cleared after validation epoch {self.current_epoch}")
         # FIX-Memory-END
     
@@ -408,141 +440,130 @@ class LightningTrainer(pl.LightningModule):
     
     def _compute_class_weights(self):
         """Compute class weights from training data."""
-        
         try:
             train_loader = self.trainer.datamodule.train_dataloader()
-            all_targets = []
             
-            # Sample a subset of data to compute weights
-            sample_count = 0
-            max_samples = 1000  # Limit sampling for efficiency
+            positive_count = 0
+            total_count = 0
             
             for batch in train_loader:
                 lightning_targets = batch['lightning']
-                all_targets.append(lightning_targets)
+                positive_count += torch.sum(lightning_targets).item()
+                total_count += lightning_targets.numel()
                 
-                sample_count += lightning_targets.shape[0]
-                if sample_count >= max_samples:
+                # Only sample a few batches for speed
+                if total_count > 100000:
                     break
             
-            if all_targets:
-                combined_targets = torch.cat(all_targets, dim=0)
-                self.class_weights = compute_class_weights(combined_targets)
+            if positive_count > 0:
+                pos_weight = (total_count - positive_count) / positive_count
+                self.class_weights = torch.tensor([1.0, pos_weight])
                 logger.info(f"Computed class weights: {self.class_weights}")
-            
+            else:
+                logger.warning("No positive samples found in training data")
+                
         except Exception as e:
-            logger.warning(f"Could not compute class weights: {e}")
-            self.class_weights = torch.tensor([1.0, 1.0])
+            logger.warning(f"Failed to compute class weights: {e}")
     
-    def freeze_backbone(self):
-        """Freeze backbone encoders for fine-tuning."""
-        self.model.freeze_encoders()
-        logger.info("Backbone encoders frozen")
-    
-    def unfreeze_backbone(self):
-        """Unfreeze backbone encoders."""
-        self.model.unfreeze_encoders()
-        logger.info("Backbone encoders unfrozen")
-    
-    def enable_domain_adaptation(self):
-        """Enable domain adaptation mode."""
-        self.domain_adaptation_enabled = True
-        logger.info("Domain adaptation enabled")
-    
-    def disable_domain_adaptation(self):
-        """Disable domain adaptation mode."""
-        self.domain_adaptation_enabled = False
-        logger.info("Domain adaptation disabled")
+    def get_model_info(self) -> Dict[str, Any]:
+        """Get model information for logging."""
+        
+        total_params = sum(p.numel() for p in self.model.parameters())
+        trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        model_size_mb = total_params * 4 / (1024 * 1024)  # Assuming float32
+        
+        # Component-wise parameter count
+        components = {}
+        for name, module in self.model.named_children():
+            component_params = sum(p.numel() for p in module.parameters())
+            components[name] = component_params
+        
+        return {
+            'total_parameters': total_params,
+            'trainable_parameters': trainable_params,
+            'model_size_mb': model_size_mb,
+            'cape_only_mode': self.model.cape_only_mode,
+            'domain_adaptation_enabled': self.domain_adaptation_enabled,
+            'components': components
+        }
 
+
+# Training utilities and helper classes
 class DomainAdaptationTrainer(LightningTrainer):
     """
-    Specialized trainer for domain adaptation from Odisha to other regions.
-    Now optimized for EfficientConvNet architecture.
+    Extended trainer for domain adaptation scenarios.
     """
     
-    def __init__(self, config: DictConfig, source_checkpoint: Optional[str] = None):
+    def __init__(self, config: DictConfig, source_checkpoint: str):
         """
         Initialize domain adaptation trainer.
         
         Args:
             config: Training configuration
-            source_checkpoint: Path to source domain checkpoint
+            source_checkpoint: Path to pre-trained source domain model
         """
         super().__init__(config)
         
-        self.source_checkpoint = source_checkpoint
+        # Load source domain weights
+        self._load_source_weights(source_checkpoint)
         
         # Domain adaptation specific settings
-        self.adaptation_lr_multiplier = getattr(config.training, 'domain_adaptation', {}).get('lr_multiplier', 0.1)
-        self.freeze_backbone_epochs = getattr(config.training, 'domain_adaptation', {}).get('freeze_epochs', 5)
+        self.domain_adaptation_warmup = getattr(config.training.domain_adaptation, 'warmup_epochs', 5)
+        self.freeze_backbone_epochs = getattr(config.training.domain_adaptation, 'freeze_backbone_epochs', 3)
         
-        # Load source domain model if provided
-        if source_checkpoint:
-            self.load_source_model(source_checkpoint)
+        logger.info(f"Domain adaptation trainer initialized")
+        logger.info(f"  Source checkpoint: {source_checkpoint}")
+        logger.info(f"  Warmup epochs: {self.domain_adaptation_warmup}")
+        logger.info(f"  Freeze backbone epochs: {self.freeze_backbone_epochs}")
     
-    def load_source_model(self, checkpoint_path: str):
-        """Load pre-trained source domain model."""
+    def _load_source_weights(self, checkpoint_path: str):
+        """Load weights from source domain checkpoint."""
         
         try:
             checkpoint = torch.load(checkpoint_path, map_location='cpu')
             
-            # Load only the main model weights, not the domain adapter
-            model_state_dict = {}
-            for key, value in checkpoint['state_dict'].items():
-                if not key.startswith('model.domain_adapter'):
-                    model_state_dict[key] = value
+            if 'state_dict' in checkpoint:
+                state_dict = checkpoint['state_dict']
+                # Remove 'model.' prefix if present
+                state_dict = {k.replace('model.', ''): v for k, v in state_dict.items()}
+            else:
+                state_dict = checkpoint
             
-            # Load weights with strict=False to allow missing domain adapter weights
-            self.load_state_dict(model_state_dict, strict=False)
+            # Load weights with strict=False to allow for missing keys
+            missing_keys, unexpected_keys = self.model.load_state_dict(state_dict, strict=False)
             
-            logger.info(f"Loaded source domain model from {checkpoint_path}")
+            if missing_keys:
+                logger.warning(f"Missing keys when loading source weights: {missing_keys}")
+            if unexpected_keys:
+                logger.warning(f"Unexpected keys when loading source weights: {unexpected_keys}")
+            
+            logger.info("Successfully loaded source domain weights")
             
         except Exception as e:
-            logger.error(f"Failed to load source model: {e}")
+            logger.error(f"Failed to load source weights: {e}")
             raise
     
-    def configure_optimizers(self) -> Dict[str, Any]:
-        """Configure optimizer with different learning rates for domain adaptation."""
+    def freeze_backbone(self):
+        """Freeze backbone components for initial domain adaptation."""
         
-        # Separate parameters for different learning rates
-        backbone_params = []
-        adapter_params = []
+        for name, param in self.model.named_parameters():
+            if any(component in name for component in ['cape_encoder', 'terrain_encoder', 'fusion']):
+                param.requires_grad = False
         
-        for name, param in self.named_parameters():
-            if 'domain_adapter' in name:
-                adapter_params.append(param)
-            else:
-                backbone_params.append(param)
+        logger.info("Backbone components frozen")
+    
+    def unfreeze_backbone(self):
+        """Unfreeze backbone components for joint training."""
         
-        # Different learning rates
-        base_lr = self.training_config.optimizer.lr
-        adapter_lr = base_lr * self.adaptation_lr_multiplier
+        for param in self.model.parameters():
+            param.requires_grad = True
         
-        optimizer_config = self.training_config.optimizer
-        
-        # FIX: Make optimizer type comparison case-insensitive
-        optimizer_type = optimizer_config.type.lower()
-        
-        if optimizer_type == "adamw":  # FIX: Changed from optimizer_config.type == "adamw"
-            optimizer = AdamW([
-                {'params': backbone_params, 'lr': base_lr},
-                {'params': adapter_params, 'lr': adapter_lr}
-            ], weight_decay=optimizer_config.weight_decay)
-        else:
-            optimizer = AdamW([
-                {'params': backbone_params, 'lr': base_lr},
-                {'params': adapter_params, 'lr': adapter_lr}
-            ], weight_decay=0.01)
-        
-        # Use same scheduler configuration as base trainer
-        scheduler_config = super().configure_optimizers()
-        scheduler_config['optimizer'] = optimizer
-        
-        return scheduler_config
+        logger.info("All components unfrozen")
     
     def on_train_epoch_start(self):
-        """Handle backbone freezing for domain adaptation."""
+        """Called at the start of each training epoch."""
         
+        # Handle backbone freezing schedule
         if self.current_epoch < self.freeze_backbone_epochs:
             if self.current_epoch == 0:
                 self.freeze_backbone()
@@ -550,6 +571,7 @@ class DomainAdaptationTrainer(LightningTrainer):
         elif self.current_epoch == self.freeze_backbone_epochs:
             self.unfreeze_backbone()
             logger.info("Backbone unfrozen for joint training")
+
 
 def create_trainer(config: DictConfig, 
                   experiment_name: str,
@@ -633,6 +655,7 @@ def create_trainer(config: DictConfig,
     )
     
     return trainer, lightning_module
+
 
 def create_domain_adaptation_trainer(config: DictConfig,
                                    source_checkpoint: str,

@@ -15,6 +15,9 @@ from .preprocessing import DataPreprocessor
 from .augmentation import SpatialAugmentation, MeteorologicalAugmentation
 from ..utils.io_utils import DataPathManager
 
+# MEMORY TRACKING IMPORTS - NEW ADDITION
+from ..utils.memory_tracker import memory_checkpoint, trace_memory_line, MemoryContext
+
 logger = logging.getLogger(__name__)
 
 class LightningDataModule(pl.LightningDataModule):
@@ -74,6 +77,7 @@ class LightningDataModule(pl.LightningDataModule):
                 logger.warning(f"Split file not found: {split_path}")
                 # Could auto-generate splits here if needed
     
+    @memory_checkpoint("DATAMODULE_SETUP")
     def setup(self, stage: Optional[str] = None):
         """
         Setup datasets for each stage.
@@ -81,124 +85,168 @@ class LightningDataModule(pl.LightningDataModule):
         """
         logger.info(f"Setting up data for stage: {stage}")
         
+        trace_memory_line()  # Start of setup
+        
         # Load file splits
-        self._load_file_splits()
+        with MemoryContext("LOAD_FILE_SPLITS"):
+            self._load_file_splits()
+        trace_memory_line()  # After file splits loading
         
         # Initialize preprocessor with normalization stats
-        self._setup_preprocessor()
+        with MemoryContext("SETUP_PREPROCESSOR"):
+            self._setup_preprocessor()
+        trace_memory_line()  # After preprocessor setup
         
         # Initialize augmentations
-        self._setup_augmentations()
+        with MemoryContext("SETUP_AUGMENTATIONS"):
+            self._setup_augmentations()
+        trace_memory_line()  # After augmentation setup
         
         # Create datasets based on stage
         if stage == 'fit' or stage is None:
-            self._setup_train_val_datasets()
+            with MemoryContext("SETUP_TRAIN_VAL_DATASETS"):
+                self._setup_train_val_datasets()
+            trace_memory_line()  # After train/val dataset setup
         
         if stage == 'test' or stage is None:
-            self._setup_test_dataset()
+            with MemoryContext("SETUP_TEST_DATASET"):
+                self._setup_test_dataset()
+            trace_memory_line()  # After test dataset setup
     
     def _load_file_splits(self):
         """Load file pairs for each split."""
+        
         splits_dir = Path(self.data_config.splits_dir)
         
-        def load_split_files(split_name: str) -> List[Dict[str, Path]]:
-            split_file = splits_dir / f"{split_name}_files.txt"
+        # Load training files
+        train_file = splits_dir / 'train_files.txt'
+        if train_file.exists():
+            self.train_files = self._parse_file_list(train_file)
+            logger.info(f"Loaded {len(self.train_files)} training file pairs")
+        else:
+            raise FileNotFoundError(f"Training split file not found: {train_file}")
+        
+        # Load validation files
+        val_file = splits_dir / 'val_files.txt'
+        if val_file.exists():
+            self.val_files = self._parse_file_list(val_file)
+            logger.info(f"Loaded {len(self.val_files)} validation file pairs")
+        else:
+            raise FileNotFoundError(f"Validation split file not found: {val_file}")
+        
+        # Load test files (optional)
+        test_file = splits_dir / 'test_files.txt'
+        if test_file.exists():
+            self.test_files = self._parse_file_list(test_file)
+            logger.info(f"Loaded {len(self.test_files)} test file pairs")
+        else:
+            logger.warning("Test split file not found - test evaluation will be skipped")
+            self.test_files = []
+    
+    def _parse_file_list(self, file_path: Path) -> List[Dict[str, Path]]:
+        """Parse file list from text file."""
+    
+        file_pairs = []
+    
+        with open(file_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
             
-            if not split_file.exists():
-                logger.warning(f"Split file not found: {split_file}")
-                return []
-            
-            file_pairs = []
-            
-            with open(split_file, 'r') as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith('#'):
-                        continue
-                    
-                    # Expected format: cape_path,lightning_path
-                    parts = line.split(',')
-                    if len(parts) != 2:
-                        logger.warning(f"Invalid line format: {line}")
-                        continue
-                    
-                    cape_rel_path, lightning_rel_path = parts
-                    
+                # Parse file paths (format: cape_path,lightning_path)
+                parts = line.split(',')
+                if len(parts) >= 2:
+                    cape_rel_path = parts[0].strip()
+                    lightning_rel_path = parts[1].strip()
+                
                     # Convert to absolute paths
-                    cape_path = Path(self.data_config.root_dir) / cape_rel_path
-                    lightning_path = Path(self.data_config.root_dir) / lightning_rel_path
-                    terrain_path = Path(self.data_config.root_dir) / self.data_config.terrain.path
-                    
+                    cape_file = Path(self.data_config.root_dir) / cape_rel_path
+                    lightning_file = Path(self.data_config.root_dir) / lightning_rel_path
+                    terrain_file = Path(self.data_config.root_dir) / "terrain" / "terrain_odisha_1km.nc"
+                
                     # Validate files exist
-                    if cape_path.exists() and lightning_path.exists() and terrain_path.exists():
-                        file_pairs.append({
-                            'cape': cape_path,
-                            'lightning': lightning_path,
-                            'terrain': terrain_path
-                        })
+                    if cape_file.exists() and lightning_file.exists() and terrain_file.exists():
+                        file_pair = {
+                            'cape': cape_file,
+                            'lightning': lightning_file,
+                            'terrain': terrain_file
+                        }
+                    
+                        # Add ERA5 file if provided
+                        if len(parts) >= 3:
+                            era5_rel_path = parts[2].strip()
+                            era5_file = Path(self.data_config.root_dir) / era5_rel_path
+                            if era5_file.exists():
+                                file_pair['era5'] = era5_file
+                    
+                        file_pairs.append(file_pair)
                     else:
                         missing = []
-                        if not cape_path.exists():
-                            missing.append(str(cape_path))
-                        if not lightning_path.exists():
-                            missing.append(str(lightning_path))
-                        if not terrain_path.exists():
-                            missing.append(str(terrain_path))
+                        if not cape_file.exists():
+                            missing.append(str(cape_file))
+                        if not lightning_file.exists():
+                            missing.append(str(lightning_file))
+                        if not terrain_file.exists():
+                            missing.append(str(terrain_file))
                         logger.warning(f"Missing files: {missing}")
-            
-            return file_pairs
-        
-        self.train_files = load_split_files('train')
-        self.val_files = load_split_files('val')
-        self.test_files = load_split_files('test')
-        
-        logger.info(f"Loaded {len(self.train_files)} train, {len(self.val_files)} val, {len(self.test_files)} test file pairs")
+    
+        return file_pairs
     
     def _setup_preprocessor(self):
-        """Initialize preprocessor with normalization statistics."""
-        logger.info("Setting up data preprocessor...")
-        
-        # Compute normalization stats from training data
-        if self.train_files:
-            # Get CAPE files for stats computation
-            cape_files = [str(fp['cape']) for fp in self.train_files]
-            terrain_files = [str(fp['terrain']) for fp in self.train_files[:1]]  # Terrain is same for all
-            
-            # Compute stats
-            cape_stats = DataPreprocessor().compute_normalization_stats(cape_files, 'cape')
-            terrain_stats = DataPreprocessor().compute_normalization_stats(terrain_files, 'terrain')
-            
-        else:
-            logger.warning("No training files found, using default normalization stats")
-            cape_stats = {'mean': 0.0, 'std': 1.0}
-            terrain_stats = {'mean': 0.0, 'std': 1.0}
-        
-        self.preprocessor = DataPreprocessor(cape_stats=cape_stats, terrain_stats=terrain_stats)
-        
-        logger.info(f"CAPE stats: {cape_stats}")
-        logger.info(f"Terrain stats: {terrain_stats}")
+        """Setup data preprocessor with normalization statistics."""
+    
+        # Use default stats or load from file if available
+        cape_stats = {'mean': 0.0, 'std': 1.0}
+        terrain_stats = {'mean': 0.0, 'std': 1.0}
+    
+        # Try to load stats from file
+        stats_file = Path(self.data_config.root_dir) / 'normalization_stats.yaml'
+        if stats_file.exists():
+            try:
+                import yaml
+                with open(stats_file, 'r') as f:
+                    stats = yaml.safe_load(f)
+                    cape_stats = stats.get('cape', cape_stats)
+                    terrain_stats = stats.get('terrain', terrain_stats)
+            except Exception as e:
+                logger.warning(f"Failed to load stats from {stats_file}: {e}")
+    
+        self.preprocessor = DataPreprocessor(
+            cape_stats=cape_stats,
+            terrain_stats=terrain_stats
+        )
+    
+        logger.info("Data preprocessor initialized")
     
     def _setup_augmentations(self):
-        """Initialize augmentation functions."""
-        # Spatial augmentation (if enabled in config)
-        if hasattr(self.data_config, 'augmentation') and self.data_config.augmentation.spatial:
-            spatial_config = self.data_config.augmentation.spatial
-            self.spatial_augmentation = SpatialAugmentation(
-                rotation_range=spatial_config.get('rotation', [-30, 30]),
-                flip_horizontal=spatial_config.get('flip_horizontal', 0.5),
-                flip_vertical=spatial_config.get('flip_vertical', 0.5)
-            )
+        """Setup data augmentation pipelines."""
         
-        # Meteorological augmentation (if enabled in config)
-        if hasattr(self.data_config, 'augmentation') and self.data_config.augmentation.meteorological:
-            met_config = self.data_config.augmentation.meteorological
-            self.meteorological_augmentation = MeteorologicalAugmentation(
-                noise_std=met_config.get('noise_std', 0.01),
-                scale_factor=met_config.get('scale_factor', [0.95, 1.05])
+        # Spatial augmentation
+        if getattr(self.data_config, 'spatial_augmentation', {}).get('enabled', False):
+            spatial_config = self.data_config.spatial_augmentation
+            self.spatial_augmentation = SpatialAugmentation(
+                rotation_range=spatial_config.get('rotation_range', 15),
+                translation_range=spatial_config.get('translation_range', 0.1),
+                scale_range=spatial_config.get('scale_range', 0.1),
+                horizontal_flip=spatial_config.get('horizontal_flip', True),
+                vertical_flip=spatial_config.get('vertical_flip', False)
             )
+            logger.info("Spatial augmentation enabled")
+        
+        # Meteorological augmentation
+        if getattr(self.data_config, 'meteorological_augmentation', {}).get('enabled', False):
+            met_config = self.data_config.meteorological_augmentation
+            self.meteorological_augmentation = MeteorologicalAugmentation(
+                cape_noise_std=met_config.get('cape_noise_std', 50.0),
+                cape_bias_range=met_config.get('cape_bias_range', 100.0),
+                temporal_jitter=met_config.get('temporal_jitter', True)
+            )
+            logger.info("Meteorological augmentation enabled")
     
     def _setup_train_val_datasets(self):
         """Setup training and validation datasets."""
+        
         # Training dataset (with augmentation)
         self.train_dataset = LightningDataset(
             file_pairs=self.train_files,
@@ -225,53 +273,82 @@ class LightningDataModule(pl.LightningDataModule):
    
     def _setup_test_dataset(self):
         """Setup test dataset."""
-        self.test_dataset = LightningDataset(
-            file_pairs=self.test_files,
-            preprocessor=self.preprocessor,
-            sequence_length=self.data_config.temporal.sequence_length,
-            spatial_augmentation=None,
-            meteorological_augmentation=None,
-            target_cape_shape=tuple(self.data_config.domain.grid_size_25km),     # CHANGED: Native 25km
-            target_lightning_shape=tuple(self.data_config.domain.grid_size_3km),
-            target_terrain_shape=tuple(self.data_config.domain.grid_size_1km)    # CHANGED: Native 1km
-        )
+        if self.test_files:
+            self.test_dataset = LightningDataset(
+                file_pairs=self.test_files,
+                preprocessor=self.preprocessor,
+                sequence_length=self.data_config.temporal.sequence_length,
+                spatial_augmentation=None,
+                meteorological_augmentation=None,
+                target_cape_shape=tuple(self.data_config.domain.grid_size_25km),     # CHANGED: Native 25km
+                target_lightning_shape=tuple(self.data_config.domain.grid_size_3km),
+                target_terrain_shape=tuple(self.data_config.domain.grid_size_1km)    # CHANGED: Native 1km
+            )
    
+    @memory_checkpoint("TRAIN_DATALOADER")
     def train_dataloader(self) -> DataLoader:
-        """Create training dataloader."""
-        return DataLoader(
-            self.train_dataset,
-            batch_size=self.data_config.batch_size,
-            shuffle=True,
-            num_workers=self.data_config.num_workers,
-            pin_memory=self.data_config.pin_memory,
-            drop_last=True,
-            persistent_workers=True if self.data_config.num_workers > 0 else False
-        )
+        """Create training dataloader with memory tracking."""
+        
+        trace_memory_line()  # Before dataloader creation
+        
+        with MemoryContext("TRAIN_DATALOADER_CREATION"):
+            dataloader = DataLoader(
+                self.train_dataset,
+                batch_size=self.data_config.batch_size,
+                shuffle=True,
+                num_workers=self.data_config.num_workers,
+                pin_memory=self.data_config.pin_memory,
+                drop_last=True,
+                persistent_workers=True if self.data_config.num_workers > 0 else False
+            )
+        
+        trace_memory_line()  # After dataloader creation
+        return dataloader
    
+    @memory_checkpoint("VAL_DATALOADER")
     def val_dataloader(self) -> DataLoader:
-        """Create validation dataloader."""
-        return DataLoader(
-            self.val_dataset,
-            batch_size=self.data_config.batch_size,
-            shuffle=False,
-            num_workers=self.data_config.num_workers,
-            pin_memory=self.data_config.pin_memory,
-            drop_last=False,
-            persistent_workers=True if self.data_config.num_workers > 0 else False
-        )
+        """Create validation dataloader with memory tracking."""
+        
+        trace_memory_line()  # Before dataloader creation
+        
+        with MemoryContext("VAL_DATALOADER_CREATION"):
+            dataloader = DataLoader(
+                self.val_dataset,
+                batch_size=self.data_config.batch_size,
+                shuffle=False,
+                num_workers=self.data_config.num_workers,
+                pin_memory=self.data_config.pin_memory,
+                drop_last=False,
+                persistent_workers=True if self.data_config.num_workers > 0 else False
+            )
+        
+        trace_memory_line()  # After dataloader creation
+        return dataloader
    
+    @memory_checkpoint("TEST_DATALOADER")
     def test_dataloader(self) -> DataLoader:
-        """Create test dataloader."""
-        return DataLoader(
-            self.test_dataset,
-            batch_size=self.data_config.batch_size,
-            shuffle=False,
-            num_workers=self.data_config.num_workers,
-            pin_memory=self.data_config.pin_memory,
-            drop_last=False,
-            persistent_workers=True if self.data_config.num_workers > 0 else False
-        )
+        """Create test dataloader with memory tracking."""
+        
+        if not self.test_dataset:
+            raise RuntimeError("Test dataset not available")
+        
+        trace_memory_line()  # Before dataloader creation
+        
+        with MemoryContext("TEST_DATALOADER_CREATION"):
+            dataloader = DataLoader(
+                self.test_dataset,
+                batch_size=self.data_config.batch_size,
+                shuffle=False,
+                num_workers=self.data_config.num_workers,
+                pin_memory=self.data_config.pin_memory,
+                drop_last=False,
+                persistent_workers=True if self.data_config.num_workers > 0 else False
+            )
+        
+        trace_memory_line()  # After dataloader creation
+        return dataloader
    
+    @memory_checkpoint("SAMPLE_BATCH")
     def get_sample_batch(self, split: str = 'train') -> Dict:
         """
         Get a sample batch for testing/debugging.
@@ -282,14 +359,21 @@ class LightningDataModule(pl.LightningDataModule):
         Returns:
             Sample batch dictionary
         """
-        if split == 'train' and self.train_dataset:
-            return self.train_dataset[0]
-        elif split == 'val' and self.val_dataset:
-            return self.val_dataset[0]
-        elif split == 'test' and self.test_dataset:
-            return self.test_dataset[0]
-        else:
-            raise ValueError(f"Dataset for split '{split}' not available")
+        trace_memory_line()  # Before sample batch
+        
+        with MemoryContext("GET_SAMPLE_BATCH"):
+            if split == 'train' and self.train_dataset:
+                sample = self.train_dataset[0]
+            elif split == 'val' and self.val_dataset:
+                sample = self.val_dataset[0]
+            elif split == 'test' and self.test_dataset:
+                sample = self.test_dataset[0]
+            else:
+                raise ValueError(f"Dataset for split '{split}' not available")
+        
+        trace_memory_line()  # After sample batch
+        return sample
+
 
 class ChunkedDataLoader:
     """
@@ -324,62 +408,146 @@ class ChunkedDataLoader:
    
     def _build_chunk_index(self):
         """Build index of all chunks across all files."""
+        
         self.chunk_index = []
         
-        for file_idx, file_dict in enumerate(self.file_pairs):
+        for file_pair in self.file_pairs:
             try:
-                # Get file time dimension
-                cape_ds = xr.open_dataset(file_dict['cape'])
-                num_times = len(cape_ds.time) if 'time' in cape_ds.dims else 1
-                cape_ds.close()
+                # Open lightning file to get time dimension
+                with xr.open_dataset(file_pair['lightning']) as ds:
+                    n_times = len(ds.time)
                 
                 # Create chunks
-                for start_time in range(0, num_times, self.chunk_size):
-                    end_time = min(start_time + self.chunk_size, num_times)
+                for start_idx in range(0, n_times, self.chunk_size):
+                    end_idx = min(start_idx + self.chunk_size, n_times)
                     
-                    self.chunk_index.append({
-                        'file_idx': file_idx,
-                        'time_start': start_time,
-                        'time_end': end_time
-                    })
-                   
+                    chunk_info = {
+                        'file_pair': file_pair,
+                        'time_slice': slice(start_idx, end_idx),
+                        'n_timesteps': end_idx - start_idx
+                    }
+                    
+                    self.chunk_index.append(chunk_info)
+            
             except Exception as e:
-                logger.warning(f"Error indexing file {file_idx}: {e}")
-                continue
-       
-        logger.info(f"Created {len(self.chunk_index)} chunks")
+                logger.warning(f"Failed to process file {file_pair['lightning']}: {e}")
+        
+        logger.info(f"Built chunk index with {len(self.chunk_index)} chunks")
+   
+    def __len__(self):
+        """Return number of chunks."""
+        return len(self.chunk_index)
    
     def __iter__(self):
         """Iterate over chunks."""
-        import random
         
-        chunk_indices = list(range(len(self.chunk_index)))
+        indices = list(range(len(self.chunk_index)))
         if self.shuffle:
-            random.shuffle(chunk_indices)
-       
-        for chunk_idx in chunk_indices:
-            chunk_info = self.chunk_index[chunk_idx]
-            file_dict = self.file_pairs[chunk_info['file_idx']]
-           
-            # Load chunk data
+            import random
+            random.shuffle(indices)
+        
+        for idx in indices:
+            chunk_info = self.chunk_index[idx]
+            
             try:
-                chunk_data = self._load_chunk(file_dict, chunk_info)
+                # Load chunk data
+                chunk_data = self._load_chunk(chunk_info)
                 
                 # Yield batches from chunk
-                for batch in self._create_batches(chunk_data):
-                    yield batch
-                   
+                yield from self._create_batches(chunk_data)
+                
             except Exception as e:
-                logger.warning(f"Error loading chunk {chunk_idx}: {e}")
+                logger.error(f"Failed to load chunk {idx}: {e}")
                 continue
    
-    def _load_chunk(self, file_dict: Dict[str, Path], chunk_info: Dict) -> Dict:
-        """Load a single chunk of data."""
-        # Implementation for loading temporal chunks
-        # This would be used for very large files
-        pass
+    def _load_chunk(self, chunk_info: Dict) -> Dict:
+        """Load data for a specific chunk."""
+        
+        file_pair = chunk_info['file_pair']
+        time_slice = chunk_info['time_slice']
+        
+        # Load data with time slicing
+        with xr.open_dataset(file_pair['lightning']) as lightning_ds:
+            lightning_data = lightning_ds.isel(time=time_slice).load()
+        
+        with xr.open_dataset(file_pair['cape']) as cape_ds:
+            cape_data = cape_ds.isel(time=time_slice).load()
+        
+        with xr.open_dataset(file_pair['terrain']) as terrain_ds:
+            terrain_data = terrain_ds.load()  # Terrain is static
+        
+        era5_data = None
+        if 'era5' in file_pair:
+            with xr.open_dataset(file_pair['era5']) as era5_ds:
+                era5_data = era5_ds.isel(time=time_slice).load()
+        
+        return {
+            'lightning': lightning_data,
+            'cape': cape_data,
+            'terrain': terrain_data,
+            'era5': era5_data
+        }
    
-    def _create_batches(self, chunk_data: Dict) -> List[Dict]:
+    def _create_batches(self, chunk_data: Dict):
         """Create batches from chunk data."""
-        # Implementation for creating batches from loaded chunk
-        pass
+        
+        n_timesteps = chunk_data['lightning'].sizes['time']
+        
+        for start_idx in range(0, n_timesteps, self.batch_size):
+            end_idx = min(start_idx + self.batch_size, n_timesteps)
+            
+            batch = {}
+            for key, data in chunk_data.items():
+                if data is not None and 'time' in data.dims:
+                    batch[key] = data.isel(time=slice(start_idx, end_idx))
+                elif data is not None:
+                    # For static data like terrain, repeat for batch
+                    batch[key] = data
+            
+            # Preprocess batch
+            processed_batch = self.preprocessor.process_batch(batch)
+            
+            yield processed_batch
+
+
+# Additional utilities for data loading
+class DataPrefetcher:
+    """
+    Prefetches data to GPU to overlap data loading with computation.
+    """
+    
+    def __init__(self, dataloader, device):
+        self.dataloader = dataloader
+        self.device = device
+        self.stream = torch.cuda.Stream() if device.type == 'cuda' else None
+    
+    def __iter__(self):
+        first_batch = True
+        
+        for batch in self.dataloader:
+            if self.stream is not None:
+                with torch.cuda.stream(self.stream):
+                    next_batch = self._move_to_device(batch)
+                
+                if not first_batch:
+                    torch.cuda.current_stream().wait_stream(self.stream)
+                
+                yield next_batch if first_batch else self.next_batch
+                
+                if not first_batch:
+                    del self.next_batch
+                
+                self.next_batch = next_batch
+                first_batch = False
+            else:
+                yield self._move_to_device(batch)
+    
+    def _move_to_device(self, batch):
+        """Move batch to device."""
+        moved_batch = {}
+        for key, value in batch.items():
+            if hasattr(value, 'to'):
+                moved_batch[key] = value.to(self.device, non_blocking=True)
+            else:
+                moved_batch[key] = value
+        return moved_batch

@@ -11,8 +11,8 @@ from omegaconf import DictConfig
 
 from .encoders import CAPEEncoder, TerrainEncoder, ERA5Encoder
 from .fusion import MeteorologicalFusion, MultiScaleFusion
-# MODIFIED: Added EfficientConvNet import
-from .components import GraphNeuralNetwork, LightweightTransformer, PredictionHead, EfficientConvNet
+# MODIFIED: Added PatchBasedTransformer import
+from .components import GraphNeuralNetwork, LightweightTransformer, PredictionHead, EfficientConvNet, PatchBasedTransformer
 from .domain_adaptation import DomainAdapter
 
 class LightningPredictor(nn.Module):
@@ -21,7 +21,7 @@ class LightningPredictor(nn.Module):
     
     Architecture Flow:
     Input Data → Encoders → Meteorological Fusion → Multi-Scale Fusion → 
-    EfficientConvNet → Transformer → Prediction Head → Lightning Probability
+    EfficientConvNet → Patch-Based Transformer → Prediction Head → Lightning Probability
     
     With Domain Adaptation and Physics Constraints integrated throughout.
     """
@@ -122,9 +122,9 @@ class LightningPredictor(nn.Module):
         print(f"   ✓ Fusion modules built (Output: {self.fusion_output_channels}ch)")
     
     def _build_core_processing(self):
-        """Build core processing components (EfficientConvNet + Transformer)."""
+        """Build core processing components (EfficientConvNet + Patch-Based Transformer)."""
         
-        # MODIFIED: Replace Graph Neural Network with Efficient ConvNet
+        # EfficientConvNet for spatial processing
         convnet_config = self.model_config.gnn  # Keep same config section name for compatibility
         self.spatial_processor = EfficientConvNet(
             input_channels=self.fusion_output_channels,
@@ -137,19 +137,36 @@ class LightningPredictor(nn.Module):
             use_attention=True
         )
         
-        # Lightweight Transformer (unchanged)
+        # MODIFIED: Patch-Based Transformer with ADAPTIVE patch size
         transformer_config = self.model_config.transformer
-        self.transformer = LightweightTransformer(
-            input_channels=convnet_config.hidden_dim,  # Input from ConvNet
+        
+        # Calculate adaptive patch size based on domain size
+        target_lightning_size = tuple(self.config.data.domain.grid_size_3km)
+        target_patches_per_dim = getattr(transformer_config, 'target_patches_per_dim', 25)
+        max_patch_size = getattr(transformer_config, 'max_patch_size', 32)
+        min_patch_size = getattr(transformer_config, 'min_patch_size', 16)
+        
+        # Adaptive patch size calculation
+        avg_domain_size = (target_lightning_size[0] + target_lightning_size[1]) // 2
+        adaptive_patch_size = max(min_patch_size, 
+                                 min(max_patch_size, 
+                                     avg_domain_size // target_patches_per_dim))
+        
+        print(f"   📐 Adaptive patch size: {adaptive_patch_size}x{adaptive_patch_size} "
+              f"({adaptive_patch_size*3}km area) for domain {target_lightning_size}")
+        
+        self.transformer = PatchBasedTransformer(
+            input_channels=convnet_config.hidden_dim,
             hidden_dim=transformer_config.hidden_dim,
             num_layers=transformer_config.num_layers,
             num_heads=transformer_config.num_heads,
+            patch_size=adaptive_patch_size,  # ADAPTIVE: Changes with domain size
             dropout=transformer_config.dropout,
             attention_type=transformer_config.attention_type
         )
         
         print(f"   ✓ Core processing built (ConvNet: {convnet_config.hidden_dim}ch, "
-              f"Transformer: {transformer_config.hidden_dim}ch)")
+              f"Adaptive Patch Transformer: {transformer_config.hidden_dim}ch)")
     
     def _build_prediction_head(self):
         """Build prediction head."""
@@ -233,7 +250,7 @@ class LightningPredictor(nn.Module):
         # Step 5: Core processing - EfficientConvNet for spatial relationships
         convnet_features = self.spatial_processor(processing_features)
         
-        # Step 6: Core processing - Transformer for patterns
+        # Step 6: Core processing - Patch-Based Transformer for patterns (MUCH FASTER!)
         transformer_features = self.transformer(convnet_features)
         
         # Step 7: Lightning prediction
@@ -246,7 +263,7 @@ class LightningPredictor(nn.Module):
             'terrain_features': terrain_features,
             'meteorological_features': meteorological_features,
             'fused_features': fused_features,
-            'convnet_features': convnet_features,  # MODIFIED: Changed from gnn_features
+            'convnet_features': convnet_features,
             'transformer_features': transformer_features
         }
         
@@ -327,7 +344,7 @@ class LightningPredictor(nn.Module):
                 'terrain_encoder': self.terrain_encoder.embedding_dim,
                 'era5_encoder': self.era5_encoder.output_channels if self.era5_encoder else 0,
                 'fusion_output': self.fusion_output_channels,
-                'convnet_hidden': self.model_config.gnn.hidden_dim,  # MODIFIED: Changed from gnn_hidden
+                'convnet_hidden': self.model_config.gnn.hidden_dim,
                 'transformer_hidden': self.model_config.transformer.hidden_dim,
                 'prediction_output': self.model_config.prediction_head.output_dim
             }

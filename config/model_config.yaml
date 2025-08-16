@@ -6,7 +6,7 @@ model:
   encoders:
     cape:
       type: "CNN2D"
-      channels: [32, 64, 128, 256]
+      channels: [16, 32, 64, 128]  # REDUCED from [32, 64, 128, 256]
       kernel_sizes: [7, 5, 3, 3]
       activation: "relu"
       dropout: 0.1
@@ -15,14 +15,14 @@ model:
       type: "CNN3D"
       in_channels: 9
       pressure_levels: 7
-      channels: [32, 64, 128, 256]
+      channels: [16, 32, 64, 128]  # REDUCED from [32, 64, 128, 256]
       kernel_sizes: [3, 3, 3, 3]
       activation: "relu"
       dropout: 0.1
       
     terrain:
       type: "TerrainEncoder"
-      embedding_dim: 64
+      embedding_dim: 48  # REDUCED from 64
       learnable_downsample: true
       downsample_method: "learned_conv"
       
@@ -31,42 +31,46 @@ model:
     meteorological:
       type: "FeatureFusion"
       fusion_method: "concatenation"
-      hidden_dim: 512
+      hidden_dim: 256  # REDUCED from 512
       
     multiscale:
       type: "TerrainGuidedUpsampling"
       upsampling_factor: 8.33
       guidance_weight: 0.3
       
-  # Core Processing - MODIFIED: Replaced Pyramid GNN with Efficient ConvNet
+  # Core Processing - EfficientConvNet (Replacing GNN)
   gnn:  # Keep same config name for compatibility
-    type: "EfficientConvNet"  # CHANGED: From PyramidGraphNeuralNetwork to EfficientConvNet
-    hidden_dim: 64  # Keep at 64 for memory efficiency
-    num_layers: 3   # INCREASED: From 2 to 3 for better feature extraction
-    num_heads: 4    # Keep for transformer compatibility
+    type: "EfficientConvNet"
+    hidden_dim: 48  # REDUCED from 64
+    num_layers: 2   # REDUCED from 3
+    num_heads: 3    # REDUCED from 4
     dropout: 0.1
-    # REMOVED: pyramid_scales, use_edge_features, graph_connectivity (GNN-specific)
-    # ADDED: ConvNet-specific parameters
-    kernel_sizes: [3, 5, 7]  # Multi-scale convolution kernels
-    use_multiscale: true     # Enable multi-scale feature fusion
-    use_attention: true      # Enable channel attention
+    # ConvNet-specific parameters
+    kernel_sizes: [3, 5, 7]  # Keep same
+    use_multiscale: true     # Keep same
+    use_attention: true      # Keep same
     
+  # Patch-Based Transformer with Adaptive Patch Size
   transformer:
-    type: "LightweightTransformer"
-    hidden_dim: 64  # Keep at 64 for memory efficiency
-    num_layers: 3   # Keep at 3
-    num_heads: 4    # Keep at 4
+    type: "PatchBasedTransformer"
+    hidden_dim: 48  # REDUCED from 64
+    num_layers: 2   # REDUCED from 3
+    num_heads: 3    # REDUCED from 4
     dropout: 0.1
     attention_type: "linear"
+    # Adaptive patch configuration for domain transfer
+    target_patches_per_dim: 25  # Keep same
+    max_patch_size: 32          # Keep same
+    min_patch_size: 16          # Keep same
     
   # Output Head
   prediction_head:
-    hidden_dim: 128
+    hidden_dim: 96  # REDUCED from 128
     output_dim: 1
     activation: "sigmoid"
     
   # Domain Adaptation
   domain_adapter:
-    terrain_adaptation_dim: 64
-    meteorological_adaptation_dim: 32
+    terrain_adaptation_dim: 48  # REDUCED from 64
+    meteorological_adaptation_dim: 24  # REDUCED from 32
     dropout: 0.1

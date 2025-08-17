@@ -36,13 +36,14 @@ data:
     resolution_km: 3
     variables: ["lightning_occurrence"]
     
-  # Domain Information
+  # Domain Information. -- This is the domain information
   domain:
     name: "odisha"
-    grid_size_25km: [85, 85]
+    grid_size_25km: [19, 26]      # This comes from the ERA5 input
     grid_size_3km: [181, 221]     # SAME AS OBSERVATION DATA -- THIS IS ALSO THE GRID SIZE THE MODEL WILL GIVE ITS PREDICTION 
-    grid_size_1km: [2130, 2130]
+    grid_size_1km: [553, 660]
     
+
   # Temporal Information
   temporal:
     resolution: "hourly"

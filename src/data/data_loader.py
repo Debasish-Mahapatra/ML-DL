@@ -142,42 +142,32 @@ class LightningDataModule(pl.LightningDataModule):
     
     def _load_file_splits(self):
         """Load file pairs for each split."""
-        
         splits_dir = Path(self.data_config.splits_dir)
         
         # Load training files
-        train_file = splits_dir / 'train_files.txt'
+        train_file = splits_dir / self.data_config.splits.train
         if train_file.exists():
             self.train_files = self._parse_file_list(train_file)
-            
             if self.debug_manager.verbose_logging:
                 debug_print(f"Loaded {len(self.train_files)} training file pairs", "verbose")
-            else:
-                logger.info(f"Loaded {len(self.train_files)} training file pairs")
         else:
             raise FileNotFoundError(f"Training split file not found: {train_file}")
         
         # Load validation files
-        val_file = splits_dir / 'val_files.txt'
+        val_file = splits_dir / self.data_config.splits.val
         if val_file.exists():
             self.val_files = self._parse_file_list(val_file)
-            
             if self.debug_manager.verbose_logging:
                 debug_print(f"Loaded {len(self.val_files)} validation file pairs", "verbose")
-            else:
-                logger.info(f"Loaded {len(self.val_files)} validation file pairs")
         else:
             raise FileNotFoundError(f"Validation split file not found: {val_file}")
         
         # Load test files (optional)
-        test_file = splits_dir / 'test_files.txt'
+        test_file = splits_dir / self.data_config.splits.test
         if test_file.exists():
             self.test_files = self._parse_file_list(test_file)
-            
             if self.debug_manager.verbose_logging:
                 debug_print(f"Loaded {len(self.test_files)} test file pairs", "verbose")
-            else:
-                logger.info(f"Loaded {len(self.test_files)} test file pairs")
         else:
             if self.debug_manager.verbose_logging:
                 debug_print("Test split file not found - test evaluation will be skipped", "verbose")
@@ -186,29 +176,50 @@ class LightningDataModule(pl.LightningDataModule):
             self.test_files = []
     
     def _parse_file_list(self, file_path: Path) -> List[Dict[str, Path]]:
-        """Parse file list from text file - CORRECTED FOR OPTION A."""
+        """Parse file list from text file."""
         file_pairs = []
         
-        # Define the single terrain file path (same for all samples)
-        terrain_file = Path(self.data_config.root_dir) / 'terrain/terrain_odisha_1km.nc'
-        
         with open(file_path, 'r') as f:
-            for line in f:
+            for line_num, line in enumerate(f, 1):
                 line = line.strip()
-                if line and not line.startswith('#'):
-                    # Parse line format: cape_file,lightning_file (2-column format)
-                    parts = line.split(',')
-                    if len(parts) == 2:
-                        file_pairs.append({
-                            'cape': Path(self.data_config.root_dir) / parts[0].strip(),
-                            'lightning': Path(self.data_config.root_dir) / parts[1].strip(),
-                            'terrain': terrain_file  # Same terrain file for all samples
-                        })
-                    else:
-                        if self.debug_manager.verbose_logging:
-                            debug_print(f"Skipping invalid line in {file_path}: {line}", "verbose")
-                        else:
-                            logger.warning(f"Skipping invalid line in {file_path}: {line}")
+                
+                # Skip empty lines and comments
+                if not line or line.startswith('#'):
+                    continue
+                
+                # Parse the line: cape_path,lightning_path
+                parts = line.split(',')
+                if len(parts) != 2:
+                    logger.warning(f"Invalid line format in {file_path}:{line_num}: {line}")
+                    continue
+                
+                cape_path, lightning_path = parts
+                
+                # Convert to absolute paths
+                cape_full_path = self.path_manager.root_dir / cape_path.strip()
+                lightning_full_path = self.path_manager.root_dir / lightning_path.strip()
+                
+                # Terrain path (always the same for Odisha)
+                terrain_full_path = self.path_manager.root_dir / "terrain" / "terrain_odisha_1km.nc"
+                
+                # Validate that files exist
+                if not cape_full_path.exists():
+                    logger.warning(f"CAPE file not found: {cape_full_path}")
+                    continue
+                
+                if not lightning_full_path.exists():
+                    logger.warning(f"Lightning file not found: {lightning_full_path}")
+                    continue
+                
+                if not terrain_full_path.exists():
+                    logger.warning(f"Terrain file not found: {terrain_full_path}")
+                    continue
+                
+                file_pairs.append({
+                    'cape': cape_full_path,
+                    'lightning': lightning_full_path,
+                    'terrain': terrain_full_path
+                })
         
         return file_pairs
     
@@ -250,8 +261,9 @@ class LightningDataModule(pl.LightningDataModule):
             debug_print("Data preprocessor setup complete", "verbose")
     
     def _setup_augmentations(self):
-        """Initialize augmentation transforms."""
+        """Setup data augmentations."""
         
+        # Check if augmentation is enabled
         if not getattr(self.data_config, 'augmentation', {}).get('enabled', False):
             if self.debug_manager.verbose_logging:
                 debug_print("Data augmentation disabled", "verbose")
@@ -291,10 +303,13 @@ class LightningDataModule(pl.LightningDataModule):
         if self.debug_manager.verbose_logging:
             debug_print("Setting up training and validation datasets", "verbose")
         
-        # Get target shapes from config with fallbacks
-        target_cape_shape = tuple(getattr(self.data_config.domain, 'grid_size_25km', (85, 85)))
-        target_lightning_shape = tuple(getattr(self.data_config.domain, 'grid_size_3km', (710, 710)))
-        target_terrain_shape = tuple(getattr(self.data_config.domain, 'grid_size_1km', (2130, 2130)))
+        # FIXED: Get target shapes from config WITHOUT fallbacks - force errors if missing
+        target_cape_shape = tuple(self.data_config.domain.grid_size_25km)
+        target_lightning_shape = tuple(self.data_config.domain.grid_size_3km)
+        target_terrain_shape = tuple(self.data_config.domain.grid_size_1km)
+        
+        if self.debug_manager.verbose_logging:
+            debug_print(f"Target shapes - CAPE: {target_cape_shape}, Lightning: {target_lightning_shape}, Terrain: {target_terrain_shape}", "verbose")
         
         # Training dataset (with augmentation)
         self.train_dataset = LightningDataset(
@@ -328,14 +343,18 @@ class LightningDataModule(pl.LightningDataModule):
    
     def _setup_test_dataset(self):
         """Setup test dataset."""
+        
         if self.test_files:
             if self.debug_manager.verbose_logging:
                 debug_print("Setting up test dataset", "verbose")
             
-            # Get target shapes from config with fallbacks
-            target_cape_shape = tuple(getattr(self.data_config.domain, 'grid_size_25km', (85, 85)))
-            target_lightning_shape = tuple(getattr(self.data_config.domain, 'grid_size_3km', (710, 710)))
-            target_terrain_shape = tuple(getattr(self.data_config.domain, 'grid_size_1km', (2130, 2130)))
+            # FIXED: Get target shapes from config WITHOUT fallbacks - force errors if missing
+            target_cape_shape = tuple(self.data_config.domain.grid_size_25km)
+            target_lightning_shape = tuple(self.data_config.domain.grid_size_3km)
+            target_terrain_shape = tuple(self.data_config.domain.grid_size_1km)
+            
+            if self.debug_manager.verbose_logging:
+                debug_print(f"Test target shapes - CAPE: {target_cape_shape}, Lightning: {target_lightning_shape}, Terrain: {target_terrain_shape}", "verbose")
             
             self.test_dataset = LightningDataset(
                 file_pairs=self.test_files,

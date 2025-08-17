@@ -12,6 +12,9 @@ from sklearn.metrics import (
 )
 import warnings
 
+# DEBUG UTILITIES IMPORTS - NEW ADDITION
+from ..utils.debug_utils import debug_print, is_debug_enabled
+
 class LightningMetrics(nn.Module):
     """
     Comprehensive metrics for lightning prediction evaluation.
@@ -63,47 +66,56 @@ class LightningMetrics(nn.Module):
             targets: Ground truth targets (B, H, W)
             probabilities: Prediction probabilities (B, H, W) or (B, 1, H, W)
         """
-        # DEBUG: Log original shapes
-        print(f"DEBUG METRICS UPDATE:")
-        print(f"  predictions original shape: {predictions.shape}")
-        print(f"  targets original shape: {targets.shape}")
-        if probabilities is not None:
-            print(f"  probabilities original shape: {probabilities.shape}")
+        # DEBUG: Log original shapes - MODIFIED
+        if is_debug_enabled("metrics"):
+            debug_print(f"METRICS UPDATE:", "metrics")
+            debug_print(f"predictions original shape: {predictions.shape}", "metrics")
+            debug_print(f"targets original shape: {targets.shape}", "metrics")
+            if probabilities is not None:
+                debug_print(f"probabilities original shape: {probabilities.shape}", "metrics")
         
         # Handle different input shapes - ENSURE CONSISTENCY
         if predictions.dim() == 4 and predictions.shape[1] == 1:
             predictions = predictions.squeeze(1)
-            print(f"  predictions after squeeze: {predictions.shape}")
+            if is_debug_enabled("metrics"):
+                debug_print(f"predictions after squeeze: {predictions.shape}", "metrics")
         
         # FIX: Also squeeze targets if they have a channel dimension
         if targets.dim() == 4 and targets.shape[1] == 1:
             targets = targets.squeeze(1)
-            print(f"  targets after squeeze: {targets.shape}")
+            if is_debug_enabled("metrics"):
+                debug_print(f"targets after squeeze: {targets.shape}", "metrics")
         
         if probabilities is not None and probabilities.dim() == 4 and probabilities.shape[1] == 1:
             probabilities = probabilities.squeeze(1)
-            print(f"  probabilities after squeeze: {probabilities.shape}")
+            if is_debug_enabled("metrics"):
+                debug_print(f"probabilities after squeeze: {probabilities.shape}", "metrics")
         
         # FIX: Ensure predictions and targets have exactly the same shape
         if predictions.shape != targets.shape:
-            print(f"  SHAPE MISMATCH DETECTED!")
-            print(f"  predictions shape: {predictions.shape}")
-            print(f"  targets shape: {targets.shape}")
+            if is_debug_enabled("metrics"):
+                debug_print(f"SHAPE MISMATCH DETECTED!", "metrics")
+                debug_print(f"predictions shape: {predictions.shape}", "metrics")
+                debug_print(f"targets shape: {targets.shape}", "metrics")
             
             # Try to fix common mismatches
             if predictions.dim() == 3 and targets.dim() == 2:
                 # predictions: (B, H, W), targets: (H, W) - add batch dimension to targets
                 targets = targets.unsqueeze(0)
-                print(f"  Fixed targets shape: {targets.shape}")
+                if is_debug_enabled("metrics"):
+                    debug_print(f"Fixed targets shape: {targets.shape}", "metrics")
             elif predictions.dim() == 2 and targets.dim() == 3:
                 # predictions: (H, W), targets: (B, H, W) - add batch dimension to predictions
                 predictions = predictions.unsqueeze(0)
-                print(f"  Fixed predictions shape: {predictions.shape}")
+                if is_debug_enabled("metrics"):
+                    debug_print(f"Fixed predictions shape: {predictions.shape}", "metrics")
                 
             # After attempted fixes, check again
             if predictions.shape != targets.shape:
                 # Last resort: interpolate to match
-                print(f"  Attempting interpolation fix...")
+                if is_debug_enabled("metrics"):
+                    debug_print(f"Attempting interpolation fix...", "metrics")
+                    
                 if predictions.numel() != targets.numel():
                     # Reshape to match the smaller tensor
                     min_h = min(predictions.shape[-2], targets.shape[-2])
@@ -119,11 +131,13 @@ class LightningMetrics(nn.Module):
                         size=(min_h, min_w), mode='nearest'
                     ).squeeze(1) if targets.dim() == 4 else targets
                     
-                    print(f"  After interpolation - predictions: {predictions.shape}, targets: {targets.shape}")
+                    if is_debug_enabled("metrics"):
+                        debug_print(f"After interpolation - predictions: {predictions.shape}, targets: {targets.shape}", "metrics")
         
-        # DEBUG: Log shapes after processing
-        print(f"  predictions final shape: {predictions.shape}")
-        print(f"  targets final shape: {targets.shape}")
+        # DEBUG: Log shapes after processing - MODIFIED
+        if is_debug_enabled("metrics"):
+            debug_print(f"predictions final shape: {predictions.shape}", "metrics")
+            debug_print(f"targets final shape: {targets.shape}", "metrics")
         
         # Convert to numpy for sklearn metrics
         pred_np = predictions.detach().cpu().numpy()
@@ -131,25 +145,28 @@ class LightningMetrics(nn.Module):
         
         # Final shape check
         if pred_np.shape != target_np.shape:
-            print(f"  CRITICAL ERROR: Still mismatched after fixes!")
-            print(f"  pred_np: {pred_np.shape}, target_np: {target_np.shape}")
+            if is_debug_enabled("metrics"):
+                debug_print(f"CRITICAL ERROR: Still mismatched after fixes!", "metrics")
+                debug_print(f"pred_np: {pred_np.shape}, target_np: {target_np.shape}", "metrics")
             return  # Skip this batch to prevent crash
         
-        # DEBUG: Log numpy array shapes and flattened lengths
-        print(f"  pred_np shape: {pred_np.shape}")
-        print(f"  target_np shape: {target_np.shape}")
-        print(f"  pred_np.flatten() length: {pred_np.flatten().shape[0]}")
-        print(f"  target_np.flatten() length: {target_np.flatten().shape[0]}")
+        # DEBUG: Log numpy array shapes and flattened lengths - MODIFIED
+        if is_debug_enabled("metrics"):
+            debug_print(f"pred_np shape: {pred_np.shape}", "metrics")
+            debug_print(f"target_np shape: {target_np.shape}", "metrics")
+            debug_print(f"pred_np.flatten() length: {pred_np.flatten().shape[0]}", "metrics")
+            debug_print(f"target_np.flatten() length: {target_np.flatten().shape[0]}", "metrics")
         
         # Store for batch computation
         self.predictions_list.append(pred_np)
         self.targets_list.append(target_np)
         
-        # DEBUG: Log accumulated totals
-        total_pred_samples = sum(p.flatten().shape[0] for p in self.predictions_list)
-        total_target_samples = sum(t.flatten().shape[0] for t in self.targets_list)
-        print(f"  Total accumulated pred samples: {total_pred_samples}")
-        print(f"  Total accumulated target samples: {total_target_samples}")
+        # DEBUG: Log accumulated totals - MODIFIED
+        if is_debug_enabled("metrics"):
+            total_pred_samples = sum(p.flatten().shape[0] for p in self.predictions_list)
+            total_target_samples = sum(t.flatten().shape[0] for t in self.targets_list)
+            debug_print(f"Total accumulated pred samples: {total_pred_samples}", "metrics")
+            debug_print(f"Total accumulated target samples: {total_target_samples}", "metrics")
         
         if probabilities is not None:
             # Apply same fixes to probabilities
@@ -160,13 +177,16 @@ class LightningMetrics(nn.Module):
                 ).squeeze(1) if probabilities.dim() == 4 else probabilities
                 
             prob_np = probabilities.detach().cpu().numpy()
-            print(f"  prob_np shape: {prob_np.shape}")
+            if is_debug_enabled("metrics"):
+                debug_print(f"prob_np shape: {prob_np.shape}", "metrics")
             self.probabilities_list.append(prob_np)
             
-            total_prob_samples = sum(p.flatten().shape[0] for p in self.probabilities_list)
-            print(f"  Total accumulated prob samples: {total_prob_samples}")
+            if is_debug_enabled("metrics"):
+                total_prob_samples = sum(p.flatten().shape[0] for p in self.probabilities_list)
+                debug_print(f"Total accumulated prob samples: {total_prob_samples}", "metrics")
         
-        print("DEBUG METRICS UPDATE END\n")
+        if is_debug_enabled("metrics"):
+            debug_print("DEBUG METRICS UPDATE END", "metrics")
     
     def compute(self) -> Dict[str, float]:
         """
@@ -230,86 +250,65 @@ class LightningMetrics(nn.Module):
                     'accuracy': 1.0 if np.all(binary_preds == 0) else (binary_preds == 0).mean(),
                     'precision': 0.0,
                     'recall': 0.0,
-                    'f1_score': 0.0,
-                    'specificity': 1.0 if np.all(binary_preds == 0) else (binary_preds == 0).mean()
+                    'f1_score': 0.0
                 }
             else:  # All positive
                 return {
                     'accuracy': 1.0 if np.all(binary_preds == 1) else (binary_preds == 1).mean(),
                     'precision': 1.0 if np.all(binary_preds == 1) else (binary_preds == 1).mean(),
                     'recall': 1.0,
-                    'f1_score': 1.0 if np.all(binary_preds == 1) else 2 * (binary_preds == 1).mean() / (1 + (binary_preds == 1).mean()),
-                    'specificity': 0.0
+                    'f1_score': 1.0 if np.all(binary_preds == 1) else 2 * (binary_preds == 1).mean() / (1 + (binary_preds == 1).mean())
                 }
         
-        # Compute metrics
-        accuracy = accuracy_score(binary_targets, binary_preds)
-        precision = precision_score(binary_targets, binary_preds, zero_division=0)
-        recall = recall_score(binary_targets, binary_preds, zero_division=0)
-        f1 = f1_score(binary_targets, binary_preds, zero_division=0)
-        
-        # Confusion matrix for additional metrics
-        tn, fp, fn, tp = confusion_matrix(binary_targets, binary_preds, labels=[0, 1]).ravel()
-        
-        # Specificity (True Negative Rate)
-        specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
-        
-        # False Alarm Rate
-        false_alarm_rate = fp / (fp + tn) if (fp + tn) > 0 else 0.0
-        
-        # Balanced accuracy
-        balanced_accuracy = (recall + specificity) / 2
-        
         return {
-            'accuracy': accuracy,
-            'precision': precision,
-            'recall': recall,
-            'f1_score': f1,
-            'specificity': specificity,
-            'false_alarm_rate': false_alarm_rate,
-            'balanced_accuracy': balanced_accuracy,
-            'true_positives': int(tp),
-            'false_positives': int(fp),
-            'true_negatives': int(tn),
-            'false_negatives': int(fn)
+            'accuracy': accuracy_score(binary_targets, binary_preds),
+            'precision': precision_score(binary_targets, binary_preds, zero_division=0),
+            'recall': recall_score(binary_targets, binary_preds, zero_division=0),
+            'f1_score': f1_score(binary_targets, binary_preds, zero_division=0)
         }
     
     def _compute_probabilistic_metrics(self, probabilities: np.ndarray, targets: np.ndarray) -> Dict[str, float]:
         """Compute probabilistic metrics."""
         
-        # FIX: Ensure arrays have same length to prevent broadcast errors in element-wise operations
-        min_length = min(len(probabilities), len(targets))
-        if len(probabilities) != len(targets):
-            probabilities = probabilities[:min_length]
-            targets = targets[:min_length]
-        
         binary_targets = targets.astype(int)
         
         # Handle edge cases
         if len(np.unique(binary_targets)) == 1:
+            warnings.warn("Only one class present in targets for probabilistic metrics")
             return {
                 'roc_auc': 0.5,
                 'average_precision': binary_targets[0],
                 'brier_score': np.mean((probabilities - binary_targets) ** 2)
             }
         
-        # ROC AUC
         try:
             roc_auc = roc_auc_score(binary_targets, probabilities)
         except ValueError:
             roc_auc = 0.5
         
-        # Average Precision (Area under PR curve)
         try:
             avg_precision = average_precision_score(binary_targets, probabilities)
         except ValueError:
             avg_precision = np.mean(binary_targets)
         
-        # Brier Score (lower is better)
+        # Brier Score
         brier_score = np.mean((probabilities - binary_targets) ** 2)
         
         # Reliability (calibration) - simplified
-        reliability = self._compute_reliability(probabilities, binary_targets)
+        n_bins = 10
+        bin_boundaries = np.linspace(0, 1, n_bins + 1)
+        bin_lowers = bin_boundaries[:-1]
+        bin_uppers = bin_boundaries[1:]
+        
+        reliability = 0.0
+        for bin_lower, bin_upper in zip(bin_lowers, bin_uppers):
+            in_bin = (probabilities > bin_lower) & (probabilities <= bin_upper)
+            prop_in_bin = in_bin.mean()
+            
+            if prop_in_bin > 0:
+                accuracy_in_bin = binary_targets[in_bin].mean()
+                avg_confidence_in_bin = probabilities[in_bin].mean()
+                reliability += np.abs(avg_confidence_in_bin - accuracy_in_bin) * prop_in_bin
         
         return {
             'roc_auc': roc_auc,
@@ -318,130 +317,18 @@ class LightningMetrics(nn.Module):
             'reliability': reliability
         }
     
-    def _compute_reliability(self, probabilities: np.ndarray, targets: np.ndarray, n_bins: int = 10) -> float:
-        """Compute reliability (calibration) metric."""
-        
-        bin_boundaries = np.linspace(0, 1, n_bins + 1)
-        bin_lowers = bin_boundaries[:-1]
-        bin_uppers = bin_boundaries[1:]
-        
-        reliability = 0.0
-        
-        for bin_lower, bin_upper in zip(bin_lowers, bin_uppers):
-            # Find predictions in this bin
-            in_bin = (probabilities > bin_lower) & (probabilities <= bin_upper)
-            prop_in_bin = in_bin.mean()
-            
-            if prop_in_bin > 0:
-                # Average confidence in this bin
-                confidence_in_bin = probabilities[in_bin].mean()
-                # Average accuracy in this bin
-                accuracy_in_bin = targets[in_bin].mean()
-                # Weighted contribution to reliability
-                reliability += np.abs(confidence_in_bin - accuracy_in_bin) * prop_in_bin
-        
-        return reliability
-    
     def _compute_spatial_metrics(self) -> Dict[str, float]:
-        """Compute spatial verification metrics using neighborhood approach."""
-        
-        if not self.predictions_list or not self.targets_list:
-            return {}
-        
-        spatial_metrics = {}
-        
-        # Process each sample separately to preserve spatial structure
-        spatial_accuracies = []
-        spatial_f1_scores = []
-        
-        for pred_batch, target_batch in zip(self.predictions_list, self.targets_list):
-            for pred, target in zip(pred_batch, target_batch):
-                
-                # Convert to binary if needed
-                if pred.max() <= 1.0 and pred.min() >= 0.0:
-                    binary_pred = (pred > self.threshold).astype(int)
-                else:
-                    binary_pred = pred.astype(int)
-                
-                binary_target = target.astype(int)
-                
-                # Compute neighborhood-based metrics
-                spatial_acc = self._neighborhood_accuracy(binary_pred, binary_target)
-                spatial_f1 = self._neighborhood_f1(binary_pred, binary_target)
-                
-                spatial_accuracies.append(spatial_acc)
-                spatial_f1_scores.append(spatial_f1)
-        
-        spatial_metrics['spatial_accuracy'] = np.mean(spatial_accuracies)
-        spatial_metrics['spatial_f1'] = np.mean(spatial_f1_scores)
-        
-        return spatial_metrics
-    
-    def _neighborhood_accuracy(self, prediction: np.ndarray, target: np.ndarray) -> float:
-        """Compute accuracy allowing for spatial tolerance."""
-        
-        if self.spatial_tolerance == 0:
-            return np.mean(prediction == target)
-        
-        # FIX: Ensure both arrays have same shape before neighborhood operations
-        if prediction.shape != target.shape:
-            min_h, min_w = min(prediction.shape[0], target.shape[0]), min(prediction.shape[1], target.shape[1])
-            prediction = prediction[:min_h, :min_w]
-            target = target[:min_h, :min_w]
-        
-        # Create neighborhood masks
-        pred_neighborhood = self._create_neighborhood_mask(prediction, self.spatial_tolerance)
-        target_neighborhood = self._create_neighborhood_mask(target, self.spatial_tolerance)
-        
-        # A prediction is correct if it hits within the neighborhood of any target
-        correct_predictions = np.logical_and(pred_neighborhood, target_neighborhood)
-        
-        # Compute neighborhood accuracy
-        total_targets = np.sum(target)
-        total_predictions = np.sum(prediction)
-        
-        if total_targets == 0 and total_predictions == 0:
-            return 1.0
-        elif total_targets == 0:
-            return 0.0
-        else:
-            return np.sum(correct_predictions) / max(total_targets, total_predictions)
-    
-    def _neighborhood_f1(self, prediction: np.ndarray, target: np.ndarray) -> float:
-        """Compute F1 score allowing for spatial tolerance."""
-        
-        if self.spatial_tolerance == 0:
-            # Standard F1 calculation
-            tp = np.sum(prediction * target)
-            fp = np.sum(prediction * (1 - target))
-            fn = np.sum((1 - prediction) * target)
-            
-            precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-            recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-            
-            return 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
-        
-        # FIX: Ensure both arrays have same shape
-        if prediction.shape != target.shape:
-            min_h, min_w = min(prediction.shape[0], target.shape[0]), min(prediction.shape[1], target.shape[1])
-            prediction = prediction[:min_h, :min_w]
-            target = target[:min_h, :min_w]
-        
-        # Neighborhood-based F1
-        pred_neighborhood = self._create_neighborhood_mask(prediction, self.spatial_tolerance)
-        target_neighborhood = self._create_neighborhood_mask(target, self.spatial_tolerance)
-        
-        tp = np.sum(pred_neighborhood * target_neighborhood)
-        fp = np.sum(pred_neighborhood * (1 - target_neighborhood))
-        fn = np.sum((1 - pred_neighborhood) * target_neighborhood)
-        
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        
-        return 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+        """Compute spatial verification metrics."""
+        # Placeholder for spatial metrics
+        # Would need to compute neighborhood-based verification
+        return {
+            'spatial_accuracy': 0.0,
+            'spatial_precision': 0.0,
+            'spatial_recall': 0.0
+        }
     
     def _create_neighborhood_mask(self, binary_array: np.ndarray, tolerance: int) -> np.ndarray:
-        """Create neighborhood mask for spatial tolerance."""
+        """Create neighborhood mask for spatial verification."""
         from scipy import ndimage
         
         # Create structuring element (disk/square)

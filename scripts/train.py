@@ -23,7 +23,7 @@ from src.data.data_loader import LightningDataModule
 from src.training.trainer import create_trainer, LightningTrainer
 from src.models.architecture import create_model_from_config
 
-# MEMORY TRACKING IMPORTS - NEW ADDITION
+# MEMORY TRACKING IMPORTS - EXISTING
 from src.utils.memory_tracker import (
     MemoryTracker, 
     memory_checkpoint, 
@@ -32,6 +32,9 @@ from src.utils.memory_tracker import (
     stop_global_monitoring,
     MemoryContext
 )
+
+# DEBUG UTILITIES IMPORTS - NEW ADDITION
+from src.utils.debug_utils import get_debug_manager, debug_print, is_debug_enabled
 
 # Setup logging
 logging.basicConfig(
@@ -88,14 +91,14 @@ def validate_config(config):
 
 @memory_checkpoint("MAIN_TRAINING")
 def main():
-    """Main training function with detailed memory tracing."""
+    """Main training function with conditional debug tracing."""
     
-    # Start global memory monitoring immediately
-    memory_tracker = start_global_monitoring()
+    # Start conditional memory monitoring - MODIFIED
+    memory_tracker = None
+    debug_manager = None
     
     try:
-        trace_memory_line()  # Checkpoint 1: Start of main
-        
+        # Parse arguments first
         parser = argparse.ArgumentParser(description="Train Lightning Prediction Model")
         parser.add_argument("--config", type=str, default="config", 
                            help="Path to config directory")
@@ -114,86 +117,107 @@ def main():
                            help="Random seed for reproducibility")
         parser.add_argument("--dry-run", action="store_true",
                            help="Validate setup without training")
+        parser.add_argument("--debug", action="store_true",
+                           help="Enable debug mode (overrides config)")
         
         args = parser.parse_args()
         
-        trace_memory_line()  # Checkpoint 2: After argument parsing
+        # Override debug mode via command line - NEW
+        if args.debug:
+            os.environ['LIGHTNING_DEBUG'] = 'true'
+            debug_print("Debug mode enabled via command line", "general")
         
-        # Set random seed
-        seed_everything(args.seed, workers=True)
-        trace_memory_line()  # Checkpoint 3: After seed setting
-        
-        # Load configuration
+        # Load configuration first - MODIFIED
         try:
             config = get_config(args.config)
             logger.info(f"Loaded configuration from {args.config}")
-            trace_memory_line()  # Checkpoint 4: After config loading
         except Exception as e:
             logger.error(f"Failed to load configuration: {e}")
             return 1
         
+        # Initialize debug manager with config - NEW
+        debug_manager = get_debug_manager(config)
+        
+        # Conditional memory tracking - MODIFIED
+        if debug_manager.memory_tracking:
+            memory_tracker = start_global_monitoring()
+            debug_manager.conditional_trace_memory("START_OF_MAIN")
+        
+        if debug_manager.verbose_logging:
+            debug_print("Starting lightning prediction training pipeline", "verbose")
+        
+        # Set random seed
+        seed_everything(args.seed, workers=True)
+        if debug_manager.memory_tracking:
+            debug_manager.conditional_trace_memory("AFTER_SEED_SETTING")
+        
         # Validate configuration
         try:
             validate_config(config)
-            trace_memory_line()  # Checkpoint 5: After config validation
+            if debug_manager.memory_tracking:
+                debug_manager.conditional_trace_memory("AFTER_CONFIG_VALIDATION")
         except Exception as e:
             logger.error(f"Configuration validation failed: {e}")
             return 1
         
-        # Setup experiment directories
+        # Setup directories
         setup_directories(args.experiment_name)
-        trace_memory_line()  # Checkpoint 6: After directory setup
+        if debug_manager.memory_tracking:
+            debug_manager.conditional_trace_memory("AFTER_DIRECTORY_SETUP")
         
-        # Save configuration for this experiment
-        config_save_path = f"experiments/{args.experiment_name}/config.yaml"
-        OmegaConf.save(config, config_save_path)
-        logger.info(f"Saved experiment configuration to {config_save_path}")
-        trace_memory_line()  # Checkpoint 7: After config save
-        
-        # Initialize data module
+        # Initialize data module - CORRECTED
         try:
-            logger.info("Initializing data module...")
-            with MemoryContext("DATA_MODULE_INIT"):
+            if debug_manager.verbose_logging:
+                debug_print("Initializing data module", "verbose")
+            
+            with MemoryContext("DATAMODULE_INIT"):
                 datamodule = LightningDataModule(config)
+            
+            if debug_manager.verbose_logging:
+                debug_print("Data module initialized, calling setup...", "verbose")
+            
+            # CRITICAL FIX: Call setup BEFORE trying to use dataloaders
+            with MemoryContext("DATAMODULE_SETUP"):
                 datamodule.setup("fit")
-            logger.info(f"Data module initialized with {len(datamodule.train_files)} train files")
-            trace_memory_line()  # Checkpoint 8: After data module init
             
-            # Log data statistics
-            with MemoryContext("SAMPLE_BATCH_GET"):
-                sample_batch = datamodule.get_sample_batch("train")
-            logger.info(f"Sample batch shapes:")
-            for key, value in sample_batch.items():
-                if isinstance(value, torch.Tensor):
-                    logger.info(f"  {key}: {value.shape}")
-            trace_memory_line()  # Checkpoint 9: After sample batch
+            if debug_manager.verbose_logging:
+                debug_print("Data module setup completed successfully", "verbose")
+                debug_print(f"Train files loaded: {len(datamodule.train_files) if datamodule.train_files else 'None'}", "verbose")
+                debug_print(f"Val files loaded: {len(datamodule.val_files) if datamodule.val_files else 'None'}", "verbose")
             
+            if debug_manager.memory_tracking:
+                debug_manager.conditional_trace_memory("AFTER_DATAMODULE_INIT_AND_SETUP")
+                
         except Exception as e:
-            memory_tracker.log_current_memory("DATA_MODULE_ERROR")
+            if debug_manager.memory_tracking and memory_tracker:
+                memory_tracker.log_current_memory("DATAMODULE_ERROR")
             logger.error(f"Failed to initialize data module: {e}")
+            # Add more detailed error info
+            import traceback
+            logger.error(f"Detailed error: {traceback.format_exc()}")
             return 1
         
-        # Create model and trainer
+        # Create trainer and model
         try:
-            logger.info("Creating trainer and model...")
-            with MemoryContext("TRAINER_MODEL_CREATION"):
-                trainer, lightning_module = create_trainer(
-                    config, 
-                    args.experiment_name,
-                    args.logger
-                )
-            trace_memory_line()  # Checkpoint 10: After trainer/model creation
+            if debug_manager.verbose_logging:
+                debug_print("Creating trainer and model", "verbose")
             
-            # Log model information
+            with MemoryContext("TRAINER_MODEL_CREATION"):
+                trainer, lightning_module = create_trainer(config, args.experiment_name, args.logger)
+            
+            # Log model info conditionally - MODIFIED
             model_info = lightning_module.model.get_model_info()
             logger.info(f"Model created:")
             logger.info(f"  Total parameters: {model_info['total_parameters']:,}")
             logger.info(f"  Model size: {model_info['model_size_mb']:.1f} MB")
             logger.info(f"  CAPE-only mode: {model_info['cape_only_mode']}")
-            trace_memory_line()  # Checkpoint 11: After model info logging
+            
+            if debug_manager.memory_tracking:
+                debug_manager.conditional_trace_memory("AFTER_MODEL_CREATION")
             
         except Exception as e:
-            memory_tracker.log_current_memory("TRAINER_MODEL_ERROR")
+            if debug_manager.memory_tracking and memory_tracker:
+                memory_tracker.log_current_memory("TRAINER_MODEL_ERROR")
             logger.error(f"Failed to create trainer/model: {e}")
             return 1
         
@@ -216,115 +240,92 @@ def main():
         try:
             logger.info("Starting training...")
             
-            # DEBUG: Test data loading before training
-            logger.info("Testing data loading...")
+            # DEBUG: Test data loading before training - CORRECTED
+            if debug_manager.verbose_logging:
+                debug_print("Testing data loading...", "verbose")
+                
             try:
+                # Now datamodule.setup() has been called, so this should work
                 with MemoryContext("TRAIN_DATALOADER_TEST"):
                     train_loader = datamodule.train_dataloader()
-                logger.info("Train dataloader created successfully")
-                trace_memory_line()  # Checkpoint 12: After dataloader creation
                 
-                # Try to get first batch
-                logger.info("Attempting to get first batch...")
-                with MemoryContext("FIRST_BATCH_LOAD"):
-                    first_batch = next(iter(train_loader))
-                logger.info(f"First batch loaded successfully")
-                logger.info(f"Batch keys: {list(first_batch.keys())}")
-                for key, value in first_batch.items():
-                    logger.info(f"  {key}: {value.shape} ({value.dtype})")
-                trace_memory_line()  # Checkpoint 13: After first batch load
+                if debug_manager.verbose_logging:
+                    debug_print("Train dataloader created successfully", "verbose")
                 
+                if debug_manager.memory_tracking:
+                    debug_manager.conditional_trace_memory("AFTER_DATALOADER_CREATION")
+                
+                # Try to get first batch - MODIFIED
+                if debug_manager.batch_info:
+                    debug_print("Attempting to get first batch...", "batch")
+                    
+                    with MemoryContext("FIRST_BATCH_LOAD"):
+                        first_batch = next(iter(train_loader))
+                    
+                    debug_print(f"First batch loaded successfully", "batch")
+                    debug_print(f"Batch keys: {list(first_batch.keys())}", "batch")
+                    
+                    for key, value in first_batch.items():
+                        debug_print(f"  {key}: {value.shape} ({value.dtype})", "batch")
+                else:
+                    # Just test loading without detailed info
+                    with MemoryContext("FIRST_BATCH_LOAD"):
+                        first_batch = next(iter(train_loader))
+                    logger.info("First batch loaded successfully")
+                
+                if debug_manager.memory_tracking:
+                    debug_manager.conditional_trace_memory("AFTER_FIRST_BATCH_TEST")
+                    
             except Exception as e:
-                memory_tracker.log_current_memory("DATA_LOADING_ERROR")
-                logger.error(f"Data loading failed: {e}")
+                logger.error(f"Data loading test failed: {e}")
+                # Add more detailed error info
+                import traceback
+                logger.error(f"Detailed data loading error: {traceback.format_exc()}")
                 return 1
             
-            # DEBUG: Test model forward pass
-            logger.info("Testing model forward pass...")
-            try:
-                lightning_module.eval()
-                with torch.no_grad():
-                    with MemoryContext("MODEL_FORWARD_TEST"):
-                        output = lightning_module(
-                            first_batch['cape'],
-                            first_batch['terrain'],
-                            first_batch.get('era5', None)
-                        )
-                    logger.info("Model forward pass successful")
-                    logger.info(f"Output shape: {output['lightning_prediction'].shape}")
-                trace_memory_line()  # Checkpoint 14: After forward pass test
-            except Exception as e:
-                memory_tracker.log_current_memory("MODEL_FORWARD_ERROR")
-                logger.error(f"Model forward pass failed: {e}")
-                return 1
+            # Start actual training
+            if debug_manager.memory_tracking:
+                debug_manager.conditional_trace_memory("BEFORE_TRAINING_START")
             
-            if args.resume_from:
-                trace_memory_line()  # Checkpoint 15: Before resume training
-                logger.info(f"Resuming training from {args.resume_from}")
-                try:
-                    with MemoryContext("RESUME_TRAINING"):
-                        trainer.fit(lightning_module, datamodule, ckpt_path=args.resume_from)
-                except Exception as e:
-                    memory_tracker.log_current_memory("RESUME_TRAINING_ERROR")
-                    import traceback
-                    logger.error(f"Training failed with detailed traceback:")
-                    logger.error(traceback.format_exc())
-                    return 1
-            else:
-                trace_memory_line()  # Checkpoint 16: Before normal training
-                try:
-                    with MemoryContext("NORMAL_TRAINING"):
-                        trainer.fit(lightning_module, datamodule)
-                except Exception as e:
-                    memory_tracker.log_current_memory("NORMAL_TRAINING_ERROR")
-                    import traceback
-                    logger.error(f"Training failed with detailed traceback:")
-                    logger.error(traceback.format_exc())
-                    return 1
+            trainer.fit(lightning_module, datamodule, ckpt_path=args.resume_from)
             
-            trace_memory_line()  # Checkpoint 17: After training completion
+            if debug_manager.memory_tracking:
+                debug_manager.conditional_trace_memory("AFTER_TRAINING_COMPLETE")
             
-            logger.info("Training completed successfully")
-            
-            # Save final model info
-            final_metrics = lightning_module.metric_tracker.get_best_metrics()
-            logger.info("Best validation metrics:")
-            for metric_name, (best_value, best_epoch) in final_metrics.items():
-                logger.info(f"  {metric_name}: {best_value:.4f} (epoch {best_epoch})")
-            
-            trace_memory_line()  # Checkpoint 18: After metrics logging
-            
-            # Test evaluation if test data available
-            if hasattr(datamodule, 'test_files') and datamodule.test_files:
-                logger.info("Running final evaluation on test set...")
-                with MemoryContext("TEST_EVALUATION"):
-                    test_results = trainer.test(lightning_module, datamodule)
-                logger.info(f"Test results: {test_results}")
-                trace_memory_line()  # Checkpoint 19: After test evaluation
-            
-        except KeyboardInterrupt:
-            memory_tracker.log_current_memory("KEYBOARD_INTERRUPT")
-            logger.info("Training interrupted by user")
-            return 0
         except Exception as e:
-            memory_tracker.log_current_memory("FINAL_EXCEPTION")
+            if debug_manager.memory_tracking and memory_tracker:
+                memory_tracker.log_current_memory("TRAINING_ERROR")
             logger.error(f"Training failed: {e}")
+            # Add more detailed error info
+            import traceback
+            logger.error(f"Detailed training error: {traceback.format_exc()}")
             return 1
         
+        # Training completed successfully
+        logger.info("Training completed successfully!")
+        
+        if debug_manager.verbose_logging:
+            debug_print("Training pipeline completed", "verbose")
+        
+        return 0
+        
     except Exception as e:
-        memory_tracker.log_current_memory("MAIN_EXCEPTION")
-        logger.error(f"Main function failed: {e}")
+        logger.error(f"Unexpected error in main: {e}")
+        # Add more detailed error info
+        import traceback
+        logger.error(f"Detailed main error: {traceback.format_exc()}")
         return 1
+        
     finally:
-        # Stop monitoring and cleanup
-        stop_global_monitoring()
+        # Cleanup
+        if debug_manager and debug_manager.memory_tracking and memory_tracker:
+            stop_global_monitoring()
+            debug_print("Memory monitoring stopped", "memory")
+        
+        # Force garbage collection
+        gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-        gc.collect()
-        trace_memory_line()  # Final checkpoint
-    
-    logger.info(f"Experiment {args.experiment_name} completed successfully")
-    return 0
 
 if __name__ == "__main__":
     exit_code = main()

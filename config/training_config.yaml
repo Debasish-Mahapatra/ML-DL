@@ -60,3 +60,12 @@ training:
   domain_adaptation:
     enabled: true
     adaptation_layers: ["terrain", "meteorological"]
+  
+  # Debug Configuration - NEW ADDITION
+  debug:
+    enabled: true              # Master debug switch - set to true to enable all debug output
+    verbose_logging: true      # Detailed logging throughout the pipeline
+    memory_tracking: false      # Memory checkpoint tracing and monitoring
+    metrics_debug: false        # Debug prints in metrics calculations
+    batch_info: true          # Batch shape and content information
+    save_debug_outputs: false  # Save intermediate outputs for inspection

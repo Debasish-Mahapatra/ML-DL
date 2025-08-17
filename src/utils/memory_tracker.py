@@ -14,42 +14,53 @@ import gc
 class MemoryTracker:
     """
     Detailed memory tracker to identify OOM kill locations with line-by-line tracking.
+    Now respects debug configuration settings.
     """
     
-    def __init__(self, log_interval: float = 5.0, memory_threshold_gb: float = 0.8):
+    def __init__(self, log_interval: float = 5.0, memory_threshold_gb: float = 0.8, debug_enabled: bool = True):
         """
         Initialize memory tracker.
         
         Args:
             log_interval: Seconds between memory logs
             memory_threshold_gb: Memory threshold ratio (0.8 = 80% of available)
+            debug_enabled: Whether memory tracking is enabled
         """
         self.log_interval = log_interval
         self.memory_threshold = memory_threshold_gb
+        self.debug_enabled = debug_enabled
         self.process = psutil.Process()
         self.monitoring = False
         self.monitor_thread = None
         
-        # Setup logging
-        self.logger = logging.getLogger(f'MemoryTracker-{os.getpid()}')
-        handler = logging.FileHandler(f'memory_trace_{os.getpid()}.log')
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - LINE:%(lineno)d - %(funcName)s - %(message)s'
-        )
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
-        self.logger.setLevel(logging.INFO)
+        # Only setup logging if debug is enabled
+        if self.debug_enabled:
+            # Setup logging
+            self.logger = logging.getLogger(f'MemoryTracker-{os.getpid()}')
+            handler = logging.FileHandler(f'memory_trace_{os.getpid()}.log')
+            formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - LINE:%(lineno)d - %(funcName)s - %(message)s'
+            )
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+            self.logger.setLevel(logging.INFO)
+        else:
+            self.logger = None
         
         # Track peak usage
         self.peak_memory_gb = 0.0
         self.peak_gpu_memory_gb = 0.0
         
-        # Setup signal handlers for SIGTERM/SIGKILL detection
-        signal.signal(signal.SIGTERM, self._signal_handler)
-        signal.signal(signal.SIGUSR1, self._signal_handler)
+        # Setup signal handlers for SIGTERM/SIGKILL detection only if debug enabled
+        if self.debug_enabled:
+            signal.signal(signal.SIGTERM, self._signal_handler)
+            signal.signal(signal.SIGUSR1, self._signal_handler)
         
     def _signal_handler(self, signum, frame):
         """Handle termination signals."""
+        if not self.debug_enabled or not self.logger:
+            return
+            
         self.logger.critical(f"SIGNAL RECEIVED: {signum}")
         self.logger.critical(f"TERMINATION_LOCATION: {frame.f_code.co_filename}:{frame.f_lineno}")
         self.logger.critical(f"FUNCTION: {frame.f_code.co_name}")
@@ -58,6 +69,9 @@ class MemoryTracker:
         
     def _dump_stack_trace(self):
         """Dump complete stack trace."""
+        if not self.debug_enabled or not self.logger:
+            return
+            
         self.logger.critical("FULL STACK TRACE AT TERMINATION:")
         for line in traceback.format_stack():
             self.logger.critical(line.strip())
@@ -94,7 +108,11 @@ class MemoryTracker:
         }
     
     def log_current_memory(self, context: str = ""):
-        """Log current memory state with context."""
+        """Log current memory state with context - ONLY if debug enabled."""
+        # EARLY RETURN if debug disabled
+        if not self.debug_enabled:
+            return
+            
         try:
             memory_info = self.get_memory_info()
             
@@ -119,41 +137,54 @@ class MemoryTracker:
                 f"Peak GPU: {self.peak_gpu_memory_gb:.2f}GB"
             )
             
-            self.logger.info(log_msg)
+            # Only log if logger exists
+            if self.logger:
+                self.logger.info(log_msg)
             
-            # Also print to console for immediate visibility
+            # Only print to console if debug enabled
             print(f"[MEMORY] {log_msg}")
             
             # Check if approaching limits
             if memory_info['system_percent'] > self.memory_threshold * 100:
                 warning_msg = f"WARNING: Memory usage high ({memory_info['system_percent']:.1f}%)"
-                self.logger.warning(warning_msg)
+                if self.logger:
+                    self.logger.warning(warning_msg)
                 print(f"[MEMORY WARNING] {warning_msg}")
                 
             if memory_info['gpu_percent'] > self.memory_threshold * 100:
                 warning_msg = f"WARNING: GPU memory usage high ({memory_info['gpu_percent']:.1f}%)"
-                self.logger.warning(warning_msg)
+                if self.logger:
+                    self.logger.warning(warning_msg)
                 print(f"[GPU WARNING] {warning_msg}")
                 
         except Exception as e:
-            self.logger.error(f"Error logging memory: {e}")
+            if self.logger:
+                self.logger.error(f"Error logging memory: {e}")
     
     def start_monitoring(self):
-        """Start background memory monitoring."""
+        """Start background memory monitoring - ONLY if debug enabled."""
+        if not self.debug_enabled:
+            return
+            
         if self.monitoring:
             return
             
         self.monitoring = True
         self.monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
         self.monitor_thread.start()
-        self.logger.info("Memory monitoring started")
+        if self.logger:
+            self.logger.info("Memory monitoring started")
     
     def stop_monitoring(self):
         """Stop background memory monitoring."""
+        if not self.debug_enabled:
+            return
+            
         self.monitoring = False
         if self.monitor_thread:
             self.monitor_thread.join(timeout=1.0)
-        self.logger.info("Memory monitoring stopped")
+        if self.logger:
+            self.logger.info("Memory monitoring stopped")
     
     def _monitor_loop(self):
         """Background monitoring loop."""
@@ -162,18 +193,31 @@ class MemoryTracker:
                 self.log_current_memory("BACKGROUND_MONITOR")
                 time.sleep(self.log_interval)
             except Exception as e:
-                self.logger.error(f"Monitor loop error: {e}")
+                if self.logger:
+                    self.logger.error(f"Monitor loop error: {e}")
                 break
 
 def memory_checkpoint(context: str = ""):
-    """Decorator to add memory checkpoints to functions."""
+    """Decorator to add memory checkpoints to functions - respects debug settings."""
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
+            # Check if debug is enabled
+            try:
+                from .debug_utils import is_debug_enabled
+                debug_enabled = is_debug_enabled("memory")
+            except ImportError:
+                # Fallback if debug utils not available
+                debug_enabled = os.getenv('LIGHTNING_DEBUG', '').lower() == 'true'
+            
+            if not debug_enabled:
+                # Just run the function without memory tracking
+                return func(*args, **kwargs)
+            
             # Log entry
             tracker = getattr(wrapper, '_memory_tracker', None)
             if tracker is None:
-                tracker = MemoryTracker()
+                tracker = MemoryTracker(debug_enabled=debug_enabled)
                 wrapper._memory_tracker = tracker
             
             tracker.log_current_memory(f"ENTER_{func.__name__}_{context}")
@@ -184,7 +228,8 @@ def memory_checkpoint(context: str = ""):
                 return result
             except Exception as e:
                 tracker.log_current_memory(f"ERROR_{func.__name__}_{context}")
-                tracker.logger.error(f"Exception in {func.__name__}: {e}")
+                if tracker.logger:
+                    tracker.logger.error(f"Exception in {func.__name__}: {e}")
                 tracker._dump_stack_trace()
                 raise
         return wrapper
@@ -192,6 +237,17 @@ def memory_checkpoint(context: str = ""):
 
 def trace_memory_line():
     """Manual memory checkpoint - call this at specific lines you want to trace."""
+    # Check if debug is enabled
+    try:
+        from .debug_utils import is_debug_enabled
+        debug_enabled = is_debug_enabled("memory")
+    except ImportError:
+        # Fallback if debug utils not available
+        debug_enabled = os.getenv('LIGHTNING_DEBUG', '').lower() == 'true'
+    
+    if not debug_enabled:
+        return  # Do nothing if debug disabled
+    
     frame = sys._getframe(1)
     filename = os.path.basename(frame.f_code.co_filename)
     line_number = frame.f_lineno
@@ -199,7 +255,7 @@ def trace_memory_line():
     
     # Get or create tracker
     if not hasattr(trace_memory_line, '_tracker'):
-        trace_memory_line._tracker = MemoryTracker()
+        trace_memory_line._tracker = MemoryTracker(debug_enabled=debug_enabled)
     
     trace_memory_line._tracker.log_current_memory(f"MANUAL_TRACE_{filename}_{function_name}")
 
@@ -210,11 +266,19 @@ def get_global_tracker() -> MemoryTracker:
     """Get global memory tracker instance."""
     global _global_tracker
     if _global_tracker is None:
-        _global_tracker = MemoryTracker()
+        # Check if debug is enabled
+        try:
+            from .debug_utils import is_debug_enabled
+            debug_enabled = is_debug_enabled("memory")
+        except ImportError:
+            # Fallback if debug utils not available
+            debug_enabled = os.getenv('LIGHTNING_DEBUG', '').lower() == 'true'
+        
+        _global_tracker = MemoryTracker(debug_enabled=debug_enabled)
     return _global_tracker
 
 def start_global_monitoring():
-    """Start global memory monitoring."""
+    """Start global memory monitoring - only if debug enabled."""
     tracker = get_global_tracker()
     tracker.start_monitoring()
     return tracker
@@ -227,19 +291,34 @@ def stop_global_monitoring():
 
 # Context manager for memory tracking
 class MemoryContext:
-    """Context manager for memory tracking."""
+    """Context manager for memory tracking - respects debug settings."""
     
     def __init__(self, context_name: str):
         self.context_name = context_name
-        self.tracker = get_global_tracker()
+        
+        # Check if debug is enabled
+        try:
+            from .debug_utils import is_debug_enabled
+            self.debug_enabled = is_debug_enabled("memory")
+        except ImportError:
+            # Fallback if debug utils not available
+            self.debug_enabled = os.getenv('LIGHTNING_DEBUG', '').lower() == 'true'
+        
+        if self.debug_enabled:
+            self.tracker = get_global_tracker()
+        else:
+            self.tracker = None
     
     def __enter__(self):
-        self.tracker.log_current_memory(f"ENTER_CONTEXT_{self.context_name}")
+        if self.tracker:
+            self.tracker.log_current_memory(f"ENTER_CONTEXT_{self.context_name}")
         return self.tracker
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type:
-            self.tracker.log_current_memory(f"ERROR_CONTEXT_{self.context_name}")
-            self.tracker.logger.error(f"Exception in context {self.context_name}: {exc_val}")
-        else:
-            self.tracker.log_current_memory(f"EXIT_CONTEXT_{self.context_name}")
+        if self.tracker:
+            if exc_type:
+                self.tracker.log_current_memory(f"ERROR_CONTEXT_{self.context_name}")
+                if self.tracker.logger:
+                    self.tracker.logger.error(f"Exception in context {self.context_name}: {exc_val}")
+            else:
+                self.tracker.log_current_memory(f"EXIT_CONTEXT_{self.context_name}")

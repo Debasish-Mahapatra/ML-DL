@@ -1,5 +1,5 @@
 """
-Main training script for lightning prediction model.
+Main training script for lightning prediction model with enhanced physics debugging.
 """
 
 import os
@@ -53,7 +53,10 @@ def setup_directories(experiment_name: str):
         "logs",
         "outputs/predictions",
         "outputs/visualizations",
-        "outputs/reports"
+        "outputs/reports",
+        # NEW: Physics debugging directories
+        f"experiments/{experiment_name}/physics_debug",
+        f"experiments/{experiment_name}/cape_analysis"
     ]
     
     for dir_path in dirs_to_create:
@@ -62,7 +65,7 @@ def setup_directories(experiment_name: str):
     logger.info(f"Created directories for experiment: {experiment_name}")
 
 def validate_config(config):
-    """Validate configuration parameters."""
+    """Validate configuration parameters with enhanced physics validation."""
     
     required_paths = [
         config.data.root_dir,
@@ -87,133 +90,253 @@ def validate_config(config):
             logger.warning(f"GPU memory ({gpu_memory_gb:.1f}GB) is limited, reducing batch size")
             config.data.batch_size = min(config.data.batch_size, 2)
     
+    # NEW: Validate physics configuration
+    if hasattr(config.training, 'cape_physics'):
+        cape_physics = config.training.cape_physics
+        
+        # Validate CAPE thresholds are in ascending order
+        thresholds = cape_physics.thresholds
+        if not (thresholds.no_lightning < thresholds.moderate < thresholds.high < thresholds.saturation):
+            raise ValueError("CAPE thresholds must be in ascending order: no_lightning < moderate < high < saturation")
+        
+        # Validate physics weights are reasonable
+        loss_config = config.training.loss
+        total_physics_weight = (
+            loss_config.charge_separation_weight + 
+            loss_config.microphysics_weight + 
+            loss_config.terrain_consistency_weight +
+            loss_config.get('cape_gradient_weight', 0.0) +
+            loss_config.get('cape_temporal_weight', 0.0)
+        )
+        
+        if total_physics_weight > 0.5:
+            logger.warning(f"Total physics weight ({total_physics_weight:.3f}) is very high - may dominate training")
+        elif total_physics_weight < 0.01:
+            logger.warning(f"Total physics weight ({total_physics_weight:.3f}) is very low - physics may have little effect")
+        
+        logger.info(f"Physics constraint validation completed - total weight: {total_physics_weight:.3f}")
+    
     logger.info("Configuration validation completed")
+
+def log_physics_configuration(config):
+    """Log detailed physics configuration for debugging."""
+    
+    logger.info("=== PHYSICS CONFIGURATION ===")
+    
+    loss_config = config.training.loss
+    logger.info(f"Main physics weight: {loss_config.physics_weight}")
+    logger.info(f"Charge separation weight: {loss_config.charge_separation_weight}")
+    logger.info(f"Microphysics weight: {loss_config.microphysics_weight}")
+    logger.info(f"Terrain consistency weight: {loss_config.terrain_consistency_weight}")
+    
+    if hasattr(loss_config, 'cape_gradient_weight'):
+        logger.info(f"CAPE gradient weight: {loss_config.cape_gradient_weight}")
+    if hasattr(loss_config, 'cape_temporal_weight'):
+        logger.info(f"CAPE temporal weight: {loss_config.cape_temporal_weight}")
+    
+    if hasattr(config.training, 'cape_physics'):
+        cape_physics = config.training.cape_physics
+        logger.info("CAPE thresholds:")
+        logger.info(f"  No lightning: {cape_physics.thresholds.no_lightning} J/kg")
+        logger.info(f"  Moderate: {cape_physics.thresholds.moderate} J/kg")
+        logger.info(f"  High: {cape_physics.thresholds.high} J/kg")
+        logger.info(f"  Saturation: {cape_physics.thresholds.saturation} J/kg")
+        logger.info(f"Optimal CAPE: {cape_physics.saturation.optimal_cape} J/kg")
+    
+    logger.info("=== END PHYSICS CONFIGURATION ===")
+
+def analyze_data_distribution(datamodule, debug_manager):
+    """Analyze CAPE and lightning data distributions for physics validation."""
+    
+    if not debug_manager.cape_analysis:
+        return
+    
+    logger.info("=== CAPE DATA ANALYSIS ===")
+    
+    try:
+        # Get a few batches for analysis
+        train_loader = datamodule.train_dataloader()
+        cape_values = []
+        lightning_values = []
+        
+        for i, batch in enumerate(train_loader):
+            if i >= 5:  # Analyze first 5 batches
+                break
+            
+            cape_data = batch['cape'].cpu().numpy()
+            lightning_data = batch['lightning'].cpu().numpy()
+            
+            cape_values.extend(cape_data.flatten())
+            lightning_values.extend(lightning_data.flatten())
+        
+        cape_values = torch.tensor(cape_values)
+        lightning_values = torch.tensor(lightning_values)
+        
+        # Log CAPE statistics
+        logger.info(f"CAPE statistics (J/kg):")
+        logger.info(f"  Min: {cape_values.min().item():.1f}")
+        logger.info(f"  Max: {cape_values.max().item():.1f}")
+        logger.info(f"  Mean: {cape_values.mean().item():.1f}")
+        logger.info(f"  Std: {cape_values.std().item():.1f}")
+        logger.info(f"  Median: {cape_values.median().item():.1f}")
+        
+        # Log lightning statistics
+        lightning_positive = lightning_values.sum().item()
+        lightning_total = len(lightning_values)
+        lightning_ratio = lightning_positive / lightning_total
+        
+        logger.info(f"Lightning statistics:")
+        logger.info(f"  Positive samples: {lightning_positive:,}")
+        logger.info(f"  Total samples: {lightning_total:,}")
+        logger.info(f"  Positive ratio: {lightning_ratio:.6f} ({lightning_ratio*100:.4f}%)")
+        
+        # CAPE-lightning correlation analysis
+        cape_with_lightning = cape_values[lightning_values > 0.5]
+        cape_without_lightning = cape_values[lightning_values <= 0.5]
+        
+        if len(cape_with_lightning) > 0:
+            logger.info(f"CAPE with lightning:")
+            logger.info(f"  Mean: {cape_with_lightning.mean().item():.1f} J/kg")
+            logger.info(f"  Std: {cape_with_lightning.std().item():.1f} J/kg")
+        
+        if len(cape_without_lightning) > 0:
+            logger.info(f"CAPE without lightning:")
+            logger.info(f"  Mean: {cape_without_lightning.mean().item():.1f} J/kg")
+            logger.info(f"  Std: {cape_without_lightning.std().item():.1f} J/kg")
+        
+        # Physics regime analysis
+        if hasattr(train_loader.dataset, 'config') and hasattr(train_loader.dataset.config.training, 'cape_physics'):
+            thresholds = train_loader.dataset.config.training.cape_physics.thresholds
+            
+            no_lightning_count = (cape_values < thresholds.no_lightning).sum().item()
+            moderate_count = ((cape_values >= thresholds.no_lightning) & (cape_values < thresholds.moderate)).sum().item()
+            high_count = ((cape_values >= thresholds.moderate) & (cape_values < thresholds.high)).sum().item()
+            very_high_count = (cape_values >= thresholds.high).sum().item()
+            
+            logger.info(f"CAPE regime distribution:")
+            logger.info(f"  No lightning regime (<{thresholds.no_lightning}): {no_lightning_count:,} ({no_lightning_count/len(cape_values)*100:.2f}%)")
+            logger.info(f"  Moderate regime ({thresholds.no_lightning}-{thresholds.moderate}): {moderate_count:,} ({moderate_count/len(cape_values)*100:.2f}%)")
+            logger.info(f"  High regime ({thresholds.moderate}-{thresholds.high}): {high_count:,} ({high_count/len(cape_values)*100:.2f}%)")
+            logger.info(f"  Very high regime (>{thresholds.high}): {very_high_count:,} ({very_high_count/len(cape_values)*100:.2f}%)")
+    
+    except Exception as e:
+        logger.warning(f"Could not analyze data distribution: {e}")
+    
+    logger.info("=== END CAPE DATA ANALYSIS ===")
 
 @memory_checkpoint("MAIN_TRAINING")
 def main():
-    """Main training function with conditional debug tracing."""
+    """Main training function with enhanced physics debugging."""
     
-    # Start conditional memory monitoring - MODIFIED
-    memory_tracker = None
-    debug_manager = None
+    parser = argparse.ArgumentParser(description="Train lightning prediction model")
+    parser.add_argument("--config", type=str, default="config/training_config.yaml",
+                       help="Path to training configuration file")
+    parser.add_argument("--model-config", type=str, default="config/model_config.yaml",
+                       help="Path to model configuration file")
+    parser.add_argument("--data-config", type=str, default="config/data_config.yaml",
+                       help="Path to data configuration file")
+    parser.add_argument("--experiment-name", type=str, default=None,
+                       help="Experiment name (overrides config)")
+    parser.add_argument("--resume-from", type=str, default=None,
+                       help="Resume training from checkpoint")
+    parser.add_argument("--dry-run", action="store_true",
+                       help="Validate setup without training")
+    parser.add_argument("--fast-dev-run", action="store_true",
+                       help="Fast development run (single batch)")
+    parser.add_argument("--overfit-batches", type=int, default=0,
+                       help="Overfit on N batches for debugging")
+    # NEW: Physics debugging arguments
+    parser.add_argument("--debug-physics", action="store_true",
+                       help="Enable detailed physics constraint debugging")
+    parser.add_argument("--analyze-cape", action="store_true",
+                       help="Analyze CAPE data distribution before training")
+    
+    args = parser.parse_args()
     
     try:
-        # Parse arguments first
-        parser = argparse.ArgumentParser(description="Train Lightning Prediction Model")
-        parser.add_argument("--config", type=str, default="config", 
-                           help="Path to config directory")
-        parser.add_argument("--experiment-name", type=str, 
-                           default=f"lightning_pred_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-                           help="Name for this experiment")
-        parser.add_argument("--resume-from", type=str, default=None,
-                           help="Path to checkpoint to resume from")
-        parser.add_argument("--fast-dev-run", action="store_true",
-                           help="Run in fast development mode (single batch)")
-        parser.add_argument("--overfit-batches", type=float, default=0.0,
-                           help="Overfit on a fraction of data for debugging")
-        parser.add_argument("--logger", type=str, choices=["tensorboard", "wandb"], 
-                           default="tensorboard", help="Logger type")
-        parser.add_argument("--seed", type=int, default=42,
-                           help="Random seed for reproducibility")
-        parser.add_argument("--dry-run", action="store_true",
-                           help="Validate setup without training")
-        parser.add_argument("--debug", action="store_true",
-                           help="Enable debug mode (overrides config)")
+        # Get configuration
+        config = get_config(
+            training_config_path=args.config,
+            model_config_path=args.model_config,
+            data_config_path=args.data_config
+        )
         
-        args = parser.parse_args()
+        # Override experiment name if provided
+        if args.experiment_name:
+            config.training.experiment_name = args.experiment_name
         
-        # Override debug mode via command line - NEW
-        if args.debug:
-            os.environ['LIGHTNING_DEBUG'] = 'true'
-            debug_print("Debug mode enabled via command line", "general")
+        # Override debug settings if specified via command line
+        if args.debug_physics:
+            if not hasattr(config.training, 'debug'):
+                config.training.debug = {}
+            config.training.debug.physics_debug = True
+            
+        if args.analyze_cape:
+            if not hasattr(config.training, 'debug'):
+                config.training.debug = {}
+            config.training.debug.cape_analysis = True
         
-        # Load configuration first - MODIFIED
-        try:
-            config = get_config(args.config)
-            logger.info(f"Loaded configuration from {args.config}")
-        except Exception as e:
-            logger.error(f"Failed to load configuration: {e}")
-            return 1
-        
-        # Initialize debug manager with config - NEW
-        debug_manager = get_debug_manager(config)
-        
-        # Conditional memory tracking - MODIFIED
-        if debug_manager.memory_tracking:
-            memory_tracker = start_global_monitoring()
-            debug_manager.conditional_trace_memory("START_OF_MAIN")
+        # Initialize debug manager
+        debug_manager = get_debug_manager(config.training.debug if hasattr(config.training, 'debug') else {})
         
         if debug_manager.verbose_logging:
-            debug_print("Starting lightning prediction training pipeline", "verbose")
+            debug_print("Starting lightning prediction training with enhanced physics", "verbose")
+        
+        # Log physics configuration
+        if debug_manager.physics_debug:
+            log_physics_configuration(config)
         
         # Set random seed
-        seed_everything(args.seed, workers=True)
-        if debug_manager.memory_tracking:
-            debug_manager.conditional_trace_memory("AFTER_SEED_SETTING")
+        seed_everything(config.training.seed, workers=True)
         
         # Validate configuration
-        try:
-            validate_config(config)
-            if debug_manager.memory_tracking:
-                debug_manager.conditional_trace_memory("AFTER_CONFIG_VALIDATION")
-        except Exception as e:
-            logger.error(f"Configuration validation failed: {e}")
-            return 1
+        validate_config(config)
         
         # Setup directories
-        setup_directories(args.experiment_name)
-        if debug_manager.memory_tracking:
-            debug_manager.conditional_trace_memory("AFTER_DIRECTORY_SETUP")
+        setup_directories(config.training.experiment_name)
         
-        # Initialize data module - CORRECTED
+        # Initialize memory tracking
+        memory_tracker = None
+        if debug_manager.memory_tracking:
+            memory_tracker = start_global_monitoring()
+            debug_print("Memory monitoring started", "memory")
+        
+        # Initialize data module
         try:
-            if debug_manager.verbose_logging:
-                debug_print("Initializing data module", "verbose")
-            
             with MemoryContext("DATAMODULE_INIT"):
                 datamodule = LightningDataModule(config)
-            
-            if debug_manager.verbose_logging:
-                debug_print("Data module initialized, calling setup...", "verbose")
-            
-            # CRITICAL FIX: Call setup BEFORE trying to use dataloaders
-            with MemoryContext("DATAMODULE_SETUP"):
-                datamodule.setup("fit")
-            
-            if debug_manager.verbose_logging:
-                debug_print("Data module setup completed successfully", "verbose")
-                debug_print(f"Train files loaded: {len(datamodule.train_files) if datamodule.train_files else 'None'}", "verbose")
-                debug_print(f"Val files loaded: {len(datamodule.val_files) if datamodule.val_files else 'None'}", "verbose")
+                datamodule.setup()
             
             if debug_manager.memory_tracking:
-                debug_manager.conditional_trace_memory("AFTER_DATAMODULE_INIT_AND_SETUP")
-                
+                debug_manager.conditional_trace_memory("AFTER_DATAMODULE_SETUP")
+            
+            logger.info("Data module initialized successfully")
+            
         except Exception as e:
             if debug_manager.memory_tracking and memory_tracker:
                 memory_tracker.log_current_memory("DATAMODULE_ERROR")
             logger.error(f"Failed to initialize data module: {e}")
-            # Add more detailed error info
-            import traceback
-            logger.error(f"Detailed error: {traceback.format_exc()}")
             return 1
+        
+        # Analyze data distribution for physics validation
+        if debug_manager.cape_analysis:
+            analyze_data_distribution(datamodule, debug_manager)
         
         # Create trainer and model
         try:
-            if debug_manager.verbose_logging:
-                debug_print("Creating trainer and model", "verbose")
-            
-            with MemoryContext("TRAINER_MODEL_CREATION"):
-                trainer, lightning_module = create_trainer(config, args.experiment_name, args.logger)
-            
-            # Log model info conditionally - MODIFIED
-            model_info = lightning_module.model.get_model_info()
-            logger.info(f"Model created:")
-            logger.info(f"  Total parameters: {model_info['total_parameters']:,}")
-            logger.info(f"  Model size: {model_info['model_size_mb']:.1f} MB")
-            logger.info(f"  CAPE-only mode: {model_info['cape_only_mode']}")
+            with MemoryContext("TRAINER_MODEL_INIT"):
+                trainer, lightning_module = create_trainer(config, config.training.experiment_name)
             
             if debug_manager.memory_tracking:
-                debug_manager.conditional_trace_memory("AFTER_MODEL_CREATION")
+                debug_manager.conditional_trace_memory("AFTER_TRAINER_MODEL_CREATION")
+            
+            logger.info("Trainer and model created successfully")
+            
+            # Log model architecture summary
+            if debug_manager.verbose_logging:
+                total_params = sum(p.numel() for p in lightning_module.model.parameters())
+                trainable_params = sum(p.numel() for p in lightning_module.model.parameters() if p.requires_grad)
+                debug_print(f"Model parameters - Total: {total_params:,}, Trainable: {trainable_params:,}", "verbose")
             
         except Exception as e:
             if debug_manager.memory_tracking and memory_tracker:
@@ -240,12 +363,11 @@ def main():
         try:
             logger.info("Starting training...")
             
-            # DEBUG: Test data loading before training - CORRECTED
+            # DEBUG: Test data loading before training
             if debug_manager.verbose_logging:
                 debug_print("Testing data loading...", "verbose")
                 
             try:
-                # Now datamodule.setup() has been called, so this should work
                 with MemoryContext("TRAIN_DATALOADER_TEST"):
                     train_loader = datamodule.train_dataloader()
                 
@@ -255,7 +377,7 @@ def main():
                 if debug_manager.memory_tracking:
                     debug_manager.conditional_trace_memory("AFTER_DATALOADER_CREATION")
                 
-                # Try to get first batch - MODIFIED
+                # Try to get first batch
                 if debug_manager.batch_info:
                     debug_print("Attempting to get first batch...", "batch")
                     
@@ -267,6 +389,23 @@ def main():
                     
                     for key, value in first_batch.items():
                         debug_print(f"  {key}: {value.shape} ({value.dtype})", "batch")
+                    
+                    # NEW: CAPE-specific analysis for first batch
+                    if debug_manager.physics_debug and 'cape' in first_batch:
+                        cape_batch = first_batch['cape']
+                        cape_stats = {
+                            'min': cape_batch.min().item(),
+                            'max': cape_batch.max().item(),
+                            'mean': cape_batch.mean().item(),
+                            'std': cape_batch.std().item()
+                        }
+                        debug_print(f"First batch CAPE stats: {cape_stats}", "physics")
+                        
+                        if 'lightning' in first_batch:
+                            lightning_batch = first_batch['lightning']
+                            lightning_pos = (lightning_batch > 0.5).sum().item()
+                            lightning_total = lightning_batch.numel()
+                            debug_print(f"First batch lightning: {lightning_pos}/{lightning_total} positive", "physics")
                 else:
                     # Just test loading without detailed info
                     with MemoryContext("FIRST_BATCH_LOAD"):
@@ -278,7 +417,6 @@ def main():
                     
             except Exception as e:
                 logger.error(f"Data loading test failed: {e}")
-                # Add more detailed error info
                 import traceback
                 logger.error(f"Detailed data loading error: {traceback.format_exc()}")
                 return 1
@@ -286,6 +424,10 @@ def main():
             # Start actual training
             if debug_manager.memory_tracking:
                 debug_manager.conditional_trace_memory("BEFORE_TRAINING_START")
+            
+            # NEW: Log training start with physics info
+            if debug_manager.physics_debug:
+                debug_print("Training started with enhanced CAPE physics constraints", "physics")
             
             trainer.fit(lightning_module, datamodule, ckpt_path=args.resume_from)
             
@@ -296,7 +438,6 @@ def main():
             if debug_manager.memory_tracking and memory_tracker:
                 memory_tracker.log_current_memory("TRAINING_ERROR")
             logger.error(f"Training failed: {e}")
-            # Add more detailed error info
             import traceback
             logger.error(f"Detailed training error: {traceback.format_exc()}")
             return 1
@@ -305,13 +446,17 @@ def main():
         logger.info("Training completed successfully!")
         
         if debug_manager.verbose_logging:
-            debug_print("Training pipeline completed", "verbose")
+            debug_print("Training pipeline completed with enhanced physics", "verbose")
+        
+        # NEW: Final physics summary
+        if debug_manager.physics_debug:
+            debug_print("Enhanced CAPE physics training completed successfully", "physics")
+            logger.info("Check logs for physics constraint performance during training")
         
         return 0
         
     except Exception as e:
         logger.error(f"Unexpected error in main: {e}")
-        # Add more detailed error info
         import traceback
         logger.error(f"Detailed main error: {traceback.format_exc()}")
         return 1

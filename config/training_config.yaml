@@ -9,10 +9,21 @@ training:
   patience: 15
   min_delta: 1e-4
   
+  # Debug Configuration - NEW SECTION
+  debug:
+    enabled: true                    # Master debug switch
+    verbose_logging: true            # Detailed logging and prediction analysis
+    physics_debug: true              # Physics constraint debugging
+    cape_analysis: true              # CAPE data distribution analysis
+    memory_tracking: false           # Memory usage tracking (can be heavy)
+    metrics_debug: false             # Detailed metrics debugging
+    batch_info: true                 # Batch-level information
+    save_debug_outputs: false        # Save debug files to disk
+  
   # Optimizer
   optimizer:
     type: "AdamW"
-    lr: 1e-5  # Keep same - reduced learning rate from 1e-4 to 1e-5
+    lr: 5e-5  # INCREASED from 1e-5 to force more exploration
     weight_decay: 1e-5
     
   # Scheduler
@@ -22,27 +33,27 @@ training:
     T_mult: 2
     eta_min: 1e-6
     
-  # Loss Configuration - ENHANCED with new physics constraints
+  # Loss Configuration - REBALANCED to fix class imbalance issues
   loss:
     type: "composite"
     primary: "focal"
     
-    # Main physics weight (overall scaling)
-    physics_weight: 0.15  # INCREASED from 0.02 to give physics more influence
+    # Main physics weight (overall scaling) - REDUCED to let model learn basic task first
+    physics_weight: 0.02  # REDUCED from 0.15 to 0.02 - less physics dominance initially
     
     # Individual physics constraint weights
-    charge_separation_weight: 0.08  # INCREASED from 0.01 - main CAPE physics
+    charge_separation_weight: 0.08  # Keep same - main CAPE physics
     microphysics_weight: 0.01       # Keep same - will be zero without temperature data
-    terrain_consistency_weight: 0.01  # INCREASED from 0.005 - terrain effects
+    terrain_consistency_weight: 0.01  # Keep same - terrain effects
     
     # NEW: Additional CAPE-specific physics weights
-    cape_gradient_weight: 0.03      # NEW - CAPE gradient/convergence zone physics
-    cape_temporal_weight: 0.02      # NEW - temporal CAPE consistency (future use)
+    cape_gradient_weight: 0.03      # Keep same - CAPE gradient/convergence zone physics
+    cape_temporal_weight: 0.02      # Keep same - temporal CAPE consistency (future use)
     
-    # Focal loss parameters
-    focal_alpha: 0.25
-    focal_gamma: 2.0
-    label_smoothing: 0.0
+    # Focal loss parameters - REBALANCED for class imbalance
+    focal_alpha: 0.75               # INCREASED from 0.25 to 0.75 - heavily favor lightning class
+    focal_gamma: 2.0                # Keep same
+    label_smoothing: 0.0            # Keep same
     
     # Adaptive learning settings
     adaptive_weights: true          # Keep same - adaptive tuning enabled
@@ -83,28 +94,15 @@ training:
     thresholds:
       no_lightning: 1000.0      # Below this: strongly discourage lightning
       moderate: 2500.0          # 1000-2500: moderate lightning probability
-      high: 4000.0              # 2500-4000: high lightning probability  
+      high: 4000.0              # 2500-4000: high lightning probability
       saturation: 5000.0        # Above this: potential saturation effects
     
-    # Gradient detection settings
-    gradient:
-      weight: 0.1               # Weight for gradient constraint within charge separation
-      threshold: 500.0          # CAPE gradient threshold (J/kg per grid cell)
-    
-    # Saturation physics settings
+    # Saturation physics
     saturation:
-      weight: 0.05              # Weight for saturation constraint
-      optimal_cape: 3500.0      # Optimal CAPE value for lightning (J/kg)
-  
-  # Debug Configuration
-  debug:
-    enabled: true              # Master debug switch - set to true to enable all debug output
-    verbose_logging: true      # Detailed logging throughout the pipeline
-    memory_tracking: false     # Memory checkpoint tracing and monitoring
-    metrics_debug: false       # Debug prints in metrics calculations
-    batch_info: true          # Batch shape and content information
-    save_debug_outputs: false  # Save intermediate outputs for inspection
+      optimal_cape: 3500.0      # Optimal CAPE for lightning formation
+      saturation_factor: 0.1    # Reduction factor for extreme CAPE values
     
-    # NEW: Physics debugging
-    physics_debug: true        # Debug physics constraint calculations
-    cape_analysis: true        # Log CAPE statistics and distributions
+    # Gradient physics
+    gradient:
+      convergence_threshold: 500.0  # CAPE gradient threshold for convergence zones
+      enhancement_factor: 1.5       # Lightning enhancement in convergence zones

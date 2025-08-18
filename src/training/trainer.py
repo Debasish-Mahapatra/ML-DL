@@ -244,7 +244,7 @@ class LightningTrainer(pl.LightningModule):
     
     @memory_checkpoint("VALIDATION_STEP")
     def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
-        """Validation step with memory tracking."""
+        """Validation step with memory tracking and prediction analysis."""
         
         trace_memory_line()  # Start of validation step
         
@@ -280,6 +280,69 @@ class LightningTrainer(pl.LightningModule):
                 binary_predictions = (probabilities > 0.5).float()
                 self.val_metrics.update(binary_predictions, lightning_targets, probabilities)
         trace_memory_line()  # After metrics update
+        
+        # NEW: Add prediction analysis debug - ONLY on first batch of first validation
+        if batch_idx == 0 and self.current_epoch == 0:
+            from ..utils.debug_utils import debug_print, is_debug_enabled
+            
+            if is_debug_enabled("verbose"):
+                with torch.no_grad():
+                    pred_min = probabilities.min().item()
+                    pred_max = probabilities.max().item()
+                    pred_mean = probabilities.mean().item()
+                    pred_std = probabilities.std().item()
+                    
+                    target_mean = lightning_targets.mean().item()
+                    target_sum = lightning_targets.sum().item()
+                    target_total = lightning_targets.numel()
+                    
+                    debug_print("=== VALIDATION PREDICTION ANALYSIS ===", "verbose")
+                    debug_print(f"Model prediction statistics (epoch {self.current_epoch}):", "verbose")
+                    debug_print(f"  Probability range: {pred_min:.6f} to {pred_max:.6f}", "verbose")
+                    debug_print(f"  Mean probability: {pred_mean:.6f}", "verbose")
+                    debug_print(f"  Std probability: {pred_std:.6f}", "verbose")
+                    
+                    debug_print(f"Target statistics:", "verbose")
+                    debug_print(f"  Lightning pixels: {target_sum}/{target_total} ({target_mean*100:.4f}%)", "verbose")
+                    
+                    debug_print(f"Threshold analysis:", "verbose")
+                    thresholds_to_test = [0.5, 0.1, 0.05, 0.02, 0.01, 0.005]
+                    for thresh in thresholds_to_test:
+                        pred_positive = (probabilities > thresh).sum().item()
+                        pred_ratio = pred_positive / probabilities.numel()
+                        debug_print(f"  Threshold {thresh:0.3f}: {pred_positive}/{probabilities.numel()} pixels ({pred_ratio*100:.4f}%)", "verbose")
+                    
+                    # Physics analysis - FIX: Resize CAPE to match predictions resolution
+                    if is_debug_enabled("physics"):
+                        debug_print(f"Physics-aware analysis:", "physics")
+                        
+                        # Resize CAPE to match prediction resolution
+                        cape_resized = torch.nn.functional.interpolate(
+                            cape_data, size=probabilities.shape[-2:], 
+                            mode='bilinear', align_corners=False
+                        )
+                        
+                        cape_flat = cape_resized.flatten()
+                        pred_flat = probabilities.flatten()
+                        
+                        # CAPE regimes
+                        low_cape_mask = cape_flat < 1000.0
+                        mod_cape_mask = (cape_flat >= 1000.0) & (cape_flat < 2500.0)
+                        high_cape_mask = cape_flat >= 2500.0
+                        
+                        if low_cape_mask.any():
+                            low_pred_mean = pred_flat[low_cape_mask].mean().item()
+                            debug_print(f"  Low CAPE (<1000): mean_pred={low_pred_mean:.6f}", "physics")
+                        
+                        if mod_cape_mask.any():
+                            mod_pred_mean = pred_flat[mod_cape_mask].mean().item()
+                            debug_print(f"  Moderate CAPE (1000-2500): mean_pred={mod_pred_mean:.6f}", "physics")
+                        
+                        if high_cape_mask.any():
+                            high_pred_mean = pred_flat[high_cape_mask].mean().item()
+                            debug_print(f"  High CAPE (>2500): mean_pred={high_pred_mean:.6f}", "physics")
+                    
+                    debug_print("=== END PREDICTION ANALYSIS ===", "verbose")
         
         # Log losses
         self.log('val_loss', total_loss, on_step=False, on_epoch=True, prog_bar=True)
@@ -486,74 +549,21 @@ class LightningTrainer(pl.LightningModule):
             'domain_adaptation_enabled': self.domain_adaptation_enabled,
             'components': components
         }
-
-
-# Training utilities and helper classes
-class DomainAdaptationTrainer(LightningTrainer):
-    """
-    Extended trainer for domain adaptation scenarios.
-    """
-    
-    def __init__(self, config: DictConfig, source_checkpoint: str):
-        """
-        Initialize domain adaptation trainer.
-        
-        Args:
-            config: Training configuration
-            source_checkpoint: Path to pre-trained source domain model
-        """
-        super().__init__(config)
-        
-        # Load source domain weights
-        self._load_source_weights(source_checkpoint)
-        
-        # Domain adaptation specific settings
-        self.domain_adaptation_warmup = getattr(config.training.domain_adaptation, 'warmup_epochs', 5)
-        self.freeze_backbone_epochs = getattr(config.training.domain_adaptation, 'freeze_backbone_epochs', 3)
-        
-        logger.info(f"Domain adaptation trainer initialized")
-        logger.info(f"  Source checkpoint: {source_checkpoint}")
-        logger.info(f"  Warmup epochs: {self.domain_adaptation_warmup}")
-        logger.info(f"  Freeze backbone epochs: {self.freeze_backbone_epochs}")
-    
-    def _load_source_weights(self, checkpoint_path: str):
-        """Load weights from source domain checkpoint."""
-        
-        try:
-            checkpoint = torch.load(checkpoint_path, map_location='cpu')
-            
-            if 'state_dict' in checkpoint:
-                state_dict = checkpoint['state_dict']
-                # Remove 'model.' prefix if present
-                state_dict = {k.replace('model.', ''): v for k, v in state_dict.items()}
-            else:
-                state_dict = checkpoint
-            
-            # Load weights with strict=False to allow for missing keys
-            missing_keys, unexpected_keys = self.model.load_state_dict(state_dict, strict=False)
-            
-            if missing_keys:
-                logger.warning(f"Missing keys when loading source weights: {missing_keys}")
-            if unexpected_keys:
-                logger.warning(f"Unexpected keys when loading source weights: {unexpected_keys}")
-            
-            logger.info("Successfully loaded source domain weights")
-            
-        except Exception as e:
-            logger.error(f"Failed to load source weights: {e}")
-            raise
     
     def freeze_backbone(self):
-        """Freeze backbone components for initial domain adaptation."""
+        """Freeze model backbone for domain adaptation."""
         
-        for name, param in self.model.named_parameters():
-            if any(component in name for component in ['cape_encoder', 'terrain_encoder', 'fusion']):
-                param.requires_grad = False
+        for param in self.model.cape_encoder.parameters():
+            param.requires_grad = False
+        for param in self.model.terrain_encoder.parameters():
+            param.requires_grad = False
+        for param in self.model.fusion_modules.parameters():
+            param.requires_grad = False
         
-        logger.info("Backbone components frozen")
+        logger.info("Backbone frozen for domain adaptation")
     
     def unfreeze_backbone(self):
-        """Unfreeze backbone components for joint training."""
+        """Unfreeze model backbone."""
         
         for param in self.model.parameters():
             param.requires_grad = True
@@ -571,6 +581,28 @@ class DomainAdaptationTrainer(LightningTrainer):
         elif self.current_epoch == self.freeze_backbone_epochs:
             self.unfreeze_backbone()
             logger.info("Backbone unfrozen for joint training")
+
+
+# Training utilities and helper classes
+class DomainAdaptationTrainer(LightningTrainer):
+    """
+    Extended trainer for domain adaptation scenarios.
+    """
+    
+    def __init__(self, config: DictConfig, source_checkpoint: str):
+        super().__init__(config)
+        
+        # Load source domain weights
+        source_model = LightningTrainer.load_from_checkpoint(source_checkpoint, config=config)
+        
+        # Transfer weights from source to target
+        self.load_state_dict(source_model.state_dict(), strict=False)
+        
+        # Enable domain adaptation
+        self.domain_adaptation_enabled = True
+        self.freeze_backbone_epochs = config.training.domain_adaptation.get('freeze_epochs', 5)
+        
+        logger.info(f"Domain adaptation trainer initialized from {source_checkpoint}")
 
 
 def create_trainer(config: DictConfig, 

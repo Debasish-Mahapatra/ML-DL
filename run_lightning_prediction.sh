@@ -233,11 +233,11 @@ train_model() {
     fi
     echo ""
     
+    # FIXED: Removed --logger tensorboard --seed 42 arguments
+    # These are already configured in the YAML files
     python scripts/train.py \
         --config "$CONFIG_DIR" \
-        --experiment-name "$EXPERIMENT_NAME" \
-        --logger tensorboard \
-        --seed 42
+        --experiment-name "$EXPERIMENT_NAME"
     
     if [ $? -eq 0 ]; then
         print_success "Model training completed successfully"
@@ -368,44 +368,6 @@ show_summary() {
 }
 
 # =============================================================================
-# MAIN EXECUTION
-# =============================================================================
-
-main() {
-    echo -e "${BLUE}"
-    echo "=========================================="
-    echo "Lightning Prediction Model Pipeline"
-    echo "=========================================="
-    echo -e "${NC}"
-    
-    # Record start time
-    START_TIME=$(date +%s)
-    
-    # Run pipeline steps
-    validate_inputs
-    setup_directories
-    setup_monitoring
-    preprocess_data
-    prepare_data_splits
-    train_model
-    evaluate_model
-    
-    # Calculate total time
-    END_TIME=$(date +%s)
-    TOTAL_TIME=$((END_TIME - START_TIME))
-    HOURS=$((TOTAL_TIME / 3600))
-    MINUTES=$(((TOTAL_TIME % 3600) / 60))
-    SECONDS=$((TOTAL_TIME % 60))
-    
-    echo ""
-    print_success "Pipeline completed successfully!"
-    echo "Total time: ${HOURS}h ${MINUTES}m ${SECONDS}s"
-    echo ""
-    
-    show_summary
-}
-
-# =============================================================================
 # ERROR HANDLING
 # =============================================================================
 
@@ -471,8 +433,42 @@ while [[ $# -gt 0 ]]; do
 done
 
 # =============================================================================
-# MODIFIED MAIN FOR OPTIONAL STEPS
+# MAIN EXECUTION FUNCTIONS
 # =============================================================================
+
+main() {
+    echo -e "${BLUE}"
+    echo "=========================================="
+    echo "Lightning Prediction Model Pipeline"
+    echo "=========================================="
+    echo -e "${NC}"
+    
+    # Record start time
+    START_TIME=$(date +%s)
+    
+    # Run pipeline steps
+    validate_inputs
+    setup_directories
+    setup_monitoring
+    preprocess_data
+    prepare_data_splits
+    train_model
+    evaluate_model
+    
+    # Calculate total time
+    END_TIME=$(date +%s)
+    TOTAL_TIME=$((END_TIME - START_TIME))
+    HOURS=$((TOTAL_TIME / 3600))
+    MINUTES=$(((TOTAL_TIME % 3600) / 60))
+    SECONDS=$((TOTAL_TIME % 60))
+    
+    echo ""
+    print_success "Pipeline completed successfully!"
+    echo "Total time: ${HOURS}h ${MINUTES}m ${SECONDS}s"
+    echo ""
+    
+    show_summary
+}
 
 main_with_options() {
     echo -e "${BLUE}"
@@ -536,5 +532,5 @@ main_with_options() {
     show_summary
 }
 
-# Run main function
+# Run main function with options
 main_with_options

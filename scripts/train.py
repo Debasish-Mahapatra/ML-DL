@@ -67,59 +67,27 @@ def setup_directories(experiment_name: str):
 def validate_config(config):
     """Validate configuration parameters with enhanced physics validation."""
     
-    required_paths = [
-        config.data.root_dir,
-        config.data.splits_dir
+    required_keys = [
+        "training.experiment_name",
+        "training.max_epochs",
+        "model.name",
+        "data.root_dir"
     ]
     
-    for path in required_paths:
-        if not Path(path).exists():
-            raise FileNotFoundError(f"Required path does not exist: {path}")
+    for key in required_keys:
+        if not OmegaConf.select(config, key):
+            raise ValueError(f"Required configuration key missing: {key}")
     
-    # Validate GPU availability if specified
-    if config.training.accelerator == "gpu" and not torch.cuda.is_available():
-        logger.warning("GPU specified but not available, falling back to CPU")
-        config.training.accelerator = "cpu"
-        config.training.devices = 1
-        config.training.precision = 32
+    # Enhanced physics validation
+    if hasattr(config.training, 'loss') and hasattr(config.training.loss, 'physics_weight'):
+        physics_weight = config.training.loss.physics_weight
+        if physics_weight < 0 or physics_weight > 1:
+            logger.warning(f"Physics weight {physics_weight} may be outside expected range [0,1]")
     
-    # Validate batch size for available memory
-    if torch.cuda.is_available():
-        gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
-        if gpu_memory_gb < 10 and config.data.batch_size > 4:
-            logger.warning(f"GPU memory ({gpu_memory_gb:.1f}GB) is limited, reducing batch size")
-            config.data.batch_size = min(config.data.batch_size, 2)
-    
-    # NEW: Validate physics configuration
-    if hasattr(config.training, 'cape_physics'):
-        cape_physics = config.training.cape_physics
-        
-        # Validate CAPE thresholds are in ascending order
-        thresholds = cape_physics.thresholds
-        if not (thresholds.no_lightning < thresholds.moderate < thresholds.high < thresholds.saturation):
-            raise ValueError("CAPE thresholds must be in ascending order: no_lightning < moderate < high < saturation")
-        
-        # Validate physics weights are reasonable
-        loss_config = config.training.loss
-        total_physics_weight = (
-            loss_config.charge_separation_weight + 
-            loss_config.microphysics_weight + 
-            loss_config.terrain_consistency_weight +
-            loss_config.get('cape_gradient_weight', 0.0) +
-            loss_config.get('cape_temporal_weight', 0.0)
-        )
-        
-        if total_physics_weight > 0.5:
-            logger.warning(f"Total physics weight ({total_physics_weight:.3f}) is very high - may dominate training")
-        elif total_physics_weight < 0.01:
-            logger.warning(f"Total physics weight ({total_physics_weight:.3f}) is very low - physics may have little effect")
-        
-        logger.info(f"Physics constraint validation completed - total weight: {total_physics_weight:.3f}")
-    
-    logger.info("Configuration validation completed")
+    logger.info("Configuration validation passed")
 
 def log_physics_configuration(config):
-    """Log detailed physics configuration for debugging."""
+    """Log physics configuration for debugging."""
     
     logger.info("=== PHYSICS CONFIGURATION ===")
     
@@ -224,10 +192,111 @@ def analyze_data_distribution(datamodule, debug_manager):
     
     logger.info("=== END CAPE DATA ANALYSIS ===")
 
+def analyze_model_predictions(model, datamodule, debug_manager, step_number=None):
+    """NEW: Analyze model prediction ranges to understand threshold issues."""
+    
+    if not debug_manager.verbose_logging and not debug_manager.physics_debug:
+        return
+    
+    step_info = f" at step {step_number}" if step_number else ""
+    debug_print(f"=== MODEL PREDICTION ANALYSIS{step_info.upper()} ===", "verbose")
+    
+    try:
+        model.eval()
+        with torch.no_grad():
+            # Get validation batch for analysis
+            val_loader = datamodule.val_dataloader()
+            sample_batch = next(iter(val_loader))
+            
+            # Move to same device as model
+            device = next(model.parameters()).device
+            cape_data = sample_batch['cape'].to(device)
+            terrain_data = sample_batch['terrain'].to(device)
+            lightning_targets = sample_batch['lightning'].to(device)
+            
+            # Forward pass
+            outputs = model(cape_data, terrain_data)
+            predictions_logits = outputs['lightning_prediction']
+            predictions_probs = torch.sigmoid(predictions_logits)
+            
+            # Analyze prediction statistics
+            pred_min = predictions_probs.min().item()
+            pred_max = predictions_probs.max().item()
+            pred_mean = predictions_probs.mean().item()
+            pred_std = predictions_probs.std().item()
+            pred_median = predictions_probs.median().item()
+            
+            # Analyze target statistics for comparison
+            target_mean = lightning_targets.mean().item()
+            target_sum = lightning_targets.sum().item()
+            target_total = lightning_targets.numel()
+            
+            # Log detailed prediction analysis
+            debug_print(f"Model prediction statistics{step_info}:", "verbose")
+            debug_print(f"  Probability range: {pred_min:.6f} to {pred_max:.6f}", "verbose")
+            debug_print(f"  Mean probability: {pred_mean:.6f}", "verbose")
+            debug_print(f"  Std probability: {pred_std:.6f}", "verbose")
+            debug_print(f"  Median probability: {pred_median:.6f}", "verbose")
+            
+            debug_print(f"Target statistics for comparison:", "verbose")
+            debug_print(f"  Lightning pixels: {target_sum}/{target_total} ({target_mean*100:.4f}%)", "verbose")
+            
+            # Threshold analysis
+            thresholds_to_test = [0.5, 0.1, 0.05, 0.02, 0.01, 0.005]
+            debug_print(f"Threshold analysis:", "verbose")
+            
+            for thresh in thresholds_to_test:
+                pred_positive = (predictions_probs > thresh).sum().item()
+                pred_ratio = pred_positive / predictions_probs.numel()
+                debug_print(f"  Threshold {thresh:0.3f}: {pred_positive}/{predictions_probs.numel()} pixels ({pred_ratio*100:.4f}%)", "verbose")
+            
+            # Physics-aware analysis
+            if debug_manager.physics_debug:
+                debug_print(f"Physics-aware prediction analysis:", "physics")
+                
+                # Analyze predictions by CAPE regime
+                cape_data_cpu = cape_data.cpu()
+                predictions_cpu = predictions_probs.cpu()
+                
+                # Define CAPE thresholds
+                cape_thresholds = {
+                    'low': 1000.0,
+                    'moderate': 2500.0,
+                    'high': 4000.0
+                }
+                
+                for regime, threshold in cape_thresholds.items():
+                    if regime == 'low':
+                        mask = cape_data_cpu < threshold
+                        regime_name = f"Low CAPE (<{threshold})"
+                    elif regime == 'moderate':
+                        mask = (cape_data_cpu >= 1000.0) & (cape_data_cpu < threshold)
+                        regime_name = f"Moderate CAPE (1000-{threshold})"
+                    else:
+                        mask = cape_data_cpu >= threshold
+                        regime_name = f"High CAPE (>{threshold})"
+                    
+                    if mask.any():
+                        regime_preds = predictions_cpu[mask]
+                        regime_mean = regime_preds.mean().item()
+                        regime_max = regime_preds.max().item()
+                        regime_pixels = mask.sum().item()
+                        
+                        debug_print(f"  {regime_name}: {regime_pixels} pixels, mean_pred={regime_mean:.6f}, max_pred={regime_max:.6f}", "physics")
+            
+        model.train()  # Return to training mode
+        
+    except Exception as e:
+        debug_print(f"Could not analyze model predictions: {e}", "verbose")
+        model.train()  # Ensure we return to training mode
+    
+    debug_print("=== END MODEL PREDICTION ANALYSIS ===", "verbose")
+
 @memory_checkpoint("MAIN_TRAINING")
 def main():
     """Main training function with enhanced physics debugging."""
     
+    # Parse arguments
     parser = argparse.ArgumentParser(description="Train lightning prediction model")
     parser.add_argument("--config", type=str, default="config/training_config.yaml",
                        help="Path to training configuration file")
@@ -254,12 +323,8 @@ def main():
     args = parser.parse_args()
     
     try:
-        # Get configuration
-        config = get_config(
-            training_config_path=args.config,
-            model_config_path=args.model_config,
-            data_config_path=args.data_config
-        )
+        # Get configuration - FIXED: Use correct function signature
+        config = get_config(args.config.replace('/training_config.yaml', ''))
         
         # Override experiment name if provided
         if args.experiment_name:
@@ -343,6 +408,10 @@ def main():
                 memory_tracker.log_current_memory("TRAINER_MODEL_ERROR")
             logger.error(f"Failed to create trainer/model: {e}")
             return 1
+        
+        # NEW: Analyze initial model predictions (before training)
+        if debug_manager.verbose_logging or debug_manager.physics_debug:
+            analyze_model_predictions(lightning_module, datamodule, debug_manager, step_number="INITIAL")
         
         # Dry run check
         if args.dry_run:
@@ -434,6 +503,10 @@ def main():
             if debug_manager.memory_tracking:
                 debug_manager.conditional_trace_memory("AFTER_TRAINING_COMPLETE")
             
+            # NEW: Analyze final model predictions (after training)
+            if debug_manager.verbose_logging or debug_manager.physics_debug:
+                analyze_model_predictions(lightning_module, datamodule, debug_manager, step_number="FINAL")
+            
         except Exception as e:
             if debug_manager.memory_tracking and memory_tracker:
                 memory_tracker.log_current_memory("TRAINING_ERROR")
@@ -463,7 +536,7 @@ def main():
         
     finally:
         # Cleanup
-        if debug_manager and debug_manager.memory_tracking and memory_tracker:
+        if 'debug_manager' in locals() and debug_manager and debug_manager.memory_tracking and 'memory_tracker' in locals() and memory_tracker:
             stop_global_monitoring()
             debug_print("Memory monitoring stopped", "memory")
         

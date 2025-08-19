@@ -14,6 +14,7 @@ from omegaconf import DictConfig
 import numpy as np
 import logging
 import gc
+from sklearn.metrics import f1_score # ADDED: For optimal threshold calculation
 
 from ..models.architecture import LightningPredictor
 from .loss_functions import CompositeLoss, create_loss_function
@@ -134,7 +135,7 @@ class LightningTrainer(pl.LightningModule):
         # FIX: Make scheduler type comparison case-insensitive and handle different naming
         scheduler_type = scheduler_config.type.lower()
         
-        if scheduler_type in ["cosine", "cosineannelingwarmrestarts"]:  # FIX: Changed from scheduler_config.type == "cosine"
+        if scheduler_type in ["cosine", "cosineannealingwarmrestarts"]:  # FIX: Changed from scheduler_config.type == "cosine"
             scheduler = CosineAnnealingWarmRestarts(
                 optimizer,
                 T_0=int(scheduler_config.T_0),  # FIX: Ensure integer
@@ -419,20 +420,51 @@ class LightningTrainer(pl.LightningModule):
         
         trace_memory_line()  # Start of validation epoch end
         
-        # Compute and log validation metrics
+        # --- START: MODIFICATION FOR OPTIMAL THRESHOLD ---
+        if self.val_metrics.probabilities_list and self.val_metrics.targets_list:
+            try:
+                # Concatenate all probabilities and targets from the validation epoch
+                all_probs = np.concatenate([p.flatten() for p in self.val_metrics.probabilities_list])
+                all_targets = np.concatenate([t.flatten() for t in self.val_metrics.targets_list])
+
+                best_f1 = -1.0
+                best_threshold = 0.5
+                
+                # Search for the best threshold on a subset of thresholds for efficiency
+                for threshold in np.linspace(0.01, 0.99, 99):
+                    preds = (all_probs > threshold).astype(int)
+                    current_f1 = f1_score(all_targets, preds, zero_division=0)
+                    
+                    if current_f1 > best_f1:
+                        best_f1 = current_f1
+                        best_threshold = threshold
+                
+                # Log the optimal F1 score and the threshold that produced it
+                self.log('val_f1_optimal', best_f1, on_epoch=True, prog_bar=True)
+                self.log('val_optimal_threshold', best_threshold, on_epoch=True)
+            except Exception as e:
+                logger.error(f"Could not compute optimal F1 threshold: {e}")
+        # --- END: MODIFICATION FOR OPTIMAL THRESHOLD ---
+
+        # Compute and log validation metrics using the default 0.5 threshold for comparison
         with MemoryContext("VAL_METRICS_COMPUTE"):
             val_metrics = self.val_metrics.compute()
         trace_memory_line()  # After metrics computation
         
         for metric_name, metric_value in val_metrics.items():
+            # Log the original f1_score (at 0.5 threshold)
             self.log(f'val_{metric_name}', metric_value, on_epoch=True, prog_bar=(metric_name == 'f1_score'))
         
         # Track metrics
         with MemoryContext("METRIC_TRACKER_UPDATE"):
-            self.metric_tracker.update(self.current_epoch, val_metrics)
+            # Update tracker with optimal F1 if available, otherwise fall back to default
+            metrics_to_track = val_metrics.copy()
+            if 'best_f1' in locals():
+                 metrics_to_track['f1_score'] = best_f1
+            self.metric_tracker.update(self.current_epoch, metrics_to_track)
         trace_memory_line()  # After metric tracking
         
-        # Reset metrics
+        # Reset metrics for the next epoch
         with MemoryContext("VAL_METRICS_RESET"):
             self.val_metrics.reset()
         trace_memory_line()  # After metrics reset
@@ -553,11 +585,16 @@ class LightningTrainer(pl.LightningModule):
     def freeze_backbone(self):
         """Freeze model backbone for domain adaptation."""
         
+        # This method seems to have an error, `fusion_modules` is not a direct attribute.
+        # Correcting this based on the architecture file.
+        # It seems `meteorological_fusion` and `multiscale_fusion` are the intended modules.
         for param in self.model.cape_encoder.parameters():
             param.requires_grad = False
         for param in self.model.terrain_encoder.parameters():
             param.requires_grad = False
-        for param in self.model.fusion_modules.parameters():
+        for param in self.model.meteorological_fusion.parameters():
+            param.requires_grad = False
+        for param in self.model.multiscale_fusion.parameters():
             param.requires_grad = False
         
         logger.info("Backbone frozen for domain adaptation")
@@ -573,14 +610,20 @@ class LightningTrainer(pl.LightningModule):
     def on_train_epoch_start(self):
         """Called at the start of each training epoch."""
         
+        # This logic seems to depend on a `freeze_backbone_epochs` attribute which is not defined.
+        # I will comment it out to prevent errors, as it seems like a remnant of a different experiment.
+        # If you need this functionality, you should define `self.freeze_backbone_epochs` in the `__init__` method.
+        
         # Handle backbone freezing schedule
-        if self.current_epoch < self.freeze_backbone_epochs:
-            if self.current_epoch == 0:
-                self.freeze_backbone()
-                logger.info(f"Backbone frozen for first {self.freeze_backbone_epochs} epochs")
-        elif self.current_epoch == self.freeze_backbone_epochs:
-            self.unfreeze_backbone()
-            logger.info("Backbone unfrozen for joint training")
+        # if hasattr(self, 'freeze_backbone_epochs'):
+        #     if self.current_epoch < self.freeze_backbone_epochs:
+        #         if self.current_epoch == 0:
+        #             self.freeze_backbone()
+        #             logger.info(f"Backbone frozen for first {self.freeze_backbone_epochs} epochs")
+        #     elif self.current_epoch == self.freeze_backbone_epochs:
+        #         self.unfreeze_backbone()
+        #         logger.info("Backbone unfrozen for joint training")
+        pass
 
 
 # Training utilities and helper classes
@@ -643,10 +686,11 @@ def create_trainer(config: DictConfig,
     callbacks = []
     
     # Model checkpointing
+    # MODIFIED: Checkpoint based on the new optimal F1 score
     checkpoint_callback = ModelCheckpoint(
         dirpath=f"checkpoints/{experiment_name}",
-        filename="{epoch:02d}-{val_f1_score:.3f}",
-        monitor="val_f1_score",
+        filename="{epoch:02d}-{val_f1_optimal:.3f}",
+        monitor="val_f1_optimal", # Monitor the optimal F1 score
         mode="max",
         save_top_k=int(config.training.save_top_k),  # FIX: Ensure it's an integer
         save_last=True,
@@ -655,8 +699,9 @@ def create_trainer(config: DictConfig,
     callbacks.append(checkpoint_callback)
     
     # Early stopping
+    # MODIFIED: Early stop based on the new optimal F1 score
     early_stop_callback = EarlyStopping(
-        monitor="val_f1_score",
+        monitor="val_f1_optimal", # Monitor the optimal F1 score
         mode="max",
         patience=int(config.training.patience),  # FIX: Ensure it's an integer
         min_delta=float(config.training.min_delta),  # FIX: Ensure it's a float
@@ -673,7 +718,7 @@ def create_trainer(config: DictConfig,
         max_epochs=int(config.training.max_epochs),  # FIX: Ensure integers
         accelerator=config.training.accelerator,
         devices=int(config.training.devices),  # FIX: Ensure integers
-        precision=int(config.training.precision),  # FIX: Ensure integers
+        precision=config.training.get('precision', 32), # Use get for safety
         gradient_clip_val=float(getattr(config.training, 'max_grad_norm', None)) if getattr(config.training, 'max_grad_norm', None) is not None else None,  # FIX: Ensure float or None
         accumulate_grad_batches=int(getattr(config.training, 'gradient_accumulation_steps', 1)),  # FIX: Ensure integers
         callbacks=callbacks,

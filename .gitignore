@@ -42,3 +42,7 @@ error.log
 output.log
 experiments/
 checkpoints/
+*.log
+submit-overfitting-job-test-1.pbs
+*.log
+submit-overfitting-job-test-1.pbs

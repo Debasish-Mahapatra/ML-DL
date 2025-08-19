@@ -51,7 +51,7 @@ data:
     
   # Data Loading
   batch_size: 4  # Keep at 1 for memory efficiency
-  num_workers: 2 # Keep at 2
+  num_workers: 1 # Keep at 2
   pin_memory: true
   
   # Data Splits

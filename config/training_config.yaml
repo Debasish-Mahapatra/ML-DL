@@ -11,19 +11,19 @@ training:
   
   # Debug Configuration - NEW SECTION
   debug:
-    enabled: true                    # Master debug switch
-    verbose_logging: true            # Detailed logging and prediction analysis
-    physics_debug: true              # Physics constraint debugging
-    cape_analysis: true              # CAPE data distribution analysis
+    enabled: false                    # Master debug switch
+    verbose_logging: false            # Detailed logging and prediction analysis
+    physics_debug: false              # Physics constraint debugging
+    cape_analysis: false              # CAPE data distribution analysis
     memory_tracking: false           # Memory usage tracking (can be heavy)
     metrics_debug: false             # Detailed metrics debugging
-    batch_info: true                 # Batch-level information
+    batch_info: false                 # Batch-level information
     save_debug_outputs: false        # Save debug files to disk
   
   # Optimizer
   optimizer:
     type: "AdamW"
-    lr: 5e-5  # INCREASED from 1e-5 to force more exploration
+    lr: 1e-5  # INCREASED from 1e-5 to force more exploration
     weight_decay: 1e-5
     
   # Scheduler
@@ -51,7 +51,7 @@ training:
     cape_temporal_weight: 0.02      # Keep same - temporal CAPE consistency (future use)
     
     # Focal loss parameters - REBALANCED for class imbalance
-    focal_alpha: 0.75               # INCREASED from 0.25 to 0.75 - heavily favor lightning class
+    focal_alpha: 0.25               # INCREASED from 0.75 to 0.9 - heavily favor lightning class
     focal_gamma: 2.0                # Keep same
     label_smoothing: 0.0            # Keep same
     

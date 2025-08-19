@@ -6,7 +6,7 @@ training:
   
   # Training Parameters
   max_epochs: 100
-  patience: 15
+  patience: 25
   min_delta: 1e-4
   
   # Debug Configuration - NEW SECTION
@@ -29,9 +29,9 @@ training:
   # Scheduler
   scheduler:
     type: "CosineAnnealingWarmRestarts"
-    T_0: 50
+    T_0: 20
     T_mult: 2
-    eta_min: 1e-6
+    eta_min: 5e-7  # Change from 1e-6
     
   # Loss Configuration - REBALANCED to fix class imbalance issues
   loss:
@@ -39,10 +39,10 @@ training:
     primary: "focal"
     
     # Main physics weight (overall scaling) - REDUCED to let model learn basic task first
-    physics_weight: 0.02  # REDUCED from 0.15 to 0.02 - less physics dominance initially
+    physics_weight: 0.01  # REDUCED from 0.15 to 0.01 - less physics dominance initially
     
     # Individual physics constraint weights
-    charge_separation_weight: 0.08  # Keep same - main CAPE physics
+    charge_separation_weight: 0.03  # Keep same - main CAPE physics
     microphysics_weight: 0.01       # Keep same - will be zero without temperature data
     terrain_consistency_weight: 0.01  # Keep same - terrain effects
     
@@ -51,7 +51,7 @@ training:
     cape_temporal_weight: 0.02      # Keep same - temporal CAPE consistency (future use)
     
     # Focal loss parameters - REBALANCED for class imbalance
-    focal_alpha: 0.25               # INCREASED from 0.75 to 0.9 - heavily favor lightning class
+    focal_alpha: 0.8               # INCREASED from 0.75 to 0.9 - heavily favor lightning class
     focal_gamma: 2.0                # Keep same
     label_smoothing: 0.0            # Keep same
     
@@ -65,7 +65,7 @@ training:
   precision: 32  # Keep same - maintain precision 32
   
   # Memory Optimization
-  gradient_accumulation_steps: 4  # Keep same for now
+  gradient_accumulation_steps: 2  # from 4 to 2, reduced
   max_grad_norm: 1.0
   
   # Reproducibility
@@ -79,7 +79,7 @@ training:
   # Checkpointing
   save_top_k: 3
   save_last: true
-  monitor: "val_f1_score"
+  monitor: "val_average_precision"
   mode: "max"
   
   # Domain Adaptation

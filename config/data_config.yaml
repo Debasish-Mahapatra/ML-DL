@@ -50,7 +50,7 @@ data:
     sequence_length: 1
     
   # Data Loading
-  batch_size: 4  # Keep at 1 for memory efficiency
+  batch_size: 16  # Keep at 1 for memory efficiency
   num_workers: 1 # Keep at 2
   pin_memory: true
   

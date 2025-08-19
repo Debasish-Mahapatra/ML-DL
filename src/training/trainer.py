@@ -56,17 +56,17 @@ class LightningTrainer(pl.LightningModule):
         
         # Initialize metrics
         self.train_metrics = LightningMetrics(
-            threshold=0.5,
+            threshold=0.05,
             spatial_tolerance=1,
             compute_spatial_metrics=True
         )
         self.val_metrics = LightningMetrics(
-            threshold=0.5,
+            threshold=0.05,
             spatial_tolerance=1,
             compute_spatial_metrics=True
         )
         self.test_metrics = LightningMetrics(
-            threshold=0.5,
+            threshold=0.05,
             spatial_tolerance=1,
             compute_spatial_metrics=True
         )
@@ -421,30 +421,32 @@ class LightningTrainer(pl.LightningModule):
         trace_memory_line()  # Start of validation epoch end
         
         # --- START: MODIFICATION FOR OPTIMAL THRESHOLD ---
-        if self.val_metrics.probabilities_list and self.val_metrics.targets_list:
-            try:
-                # Concatenate all probabilities and targets from the validation epoch
-                all_probs = np.concatenate([p.flatten() for p in self.val_metrics.probabilities_list])
-                all_targets = np.concatenate([t.flatten() for t in self.val_metrics.targets_list])
+        #if self.val_metrics.probabilities_list and self.val_metrics.targets_list:
+        #    try:
+        #        # Concatenate all probabilities and targets from the validation epoch
+        #        all_probs = np.concatenate([p.flatten() for p in self.val_metrics.probabilities_list])
+        #        all_targets = np.concatenate([t.flatten() for t in self.val_metrics.targets_list])
 
-                best_f1 = -1.0
-                best_threshold = 0.5
+        #        best_f1 = -1.0
+        #        best_threshold = 0.5
                 
-                # Search for the best threshold on a subset of thresholds for efficiency
-                for threshold in np.linspace(0.01, 0.99, 99):
-                    preds = (all_probs > threshold).astype(int)
-                    current_f1 = f1_score(all_targets, preds, zero_division=0)
-                    
-                    if current_f1 > best_f1:
-                        best_f1 = current_f1
-                        best_threshold = threshold
-                
-                # Log the optimal F1 score and the threshold that produced it
-                self.log('val_f1_optimal', best_f1, on_epoch=True, prog_bar=True)
-                self.log('val_optimal_threshold', best_threshold, on_epoch=True)
-            except Exception as e:
-                logger.error(f"Could not compute optimal F1 threshold: {e}")
+        #        # Search for the best threshold on a subset of thresholds for efficiency
+        #        for threshold in np.linspace(0.01, 0.99, 99):
+        #            preds = (all_probs > threshold).astype(int)
+        #            current_f1 = f1_score(all_targets, preds, zero_division=0)
+        #            
+        #            if current_f1 > best_f1:
+        #                best_f1 = current_f1
+        #                best_threshold = threshold
+        #        
+        #        # Log the optimal F1 score and the threshold that produced it
+        #        self.log('val_f1_optimal', best_f1, on_epoch=True, prog_bar=True)
+        #        self.log('val_optimal_threshold', best_threshold, on_epoch=True)
+        #    except Exception as e:
+        #        logger.error(f"Could not compute optimal F1 threshold: {e}")
         # --- END: MODIFICATION FOR OPTIMAL THRESHOLD ---
+
+
 
         # Compute and log validation metrics using the default 0.5 threshold for comparison
         with MemoryContext("VAL_METRICS_COMPUTE"):
@@ -459,8 +461,6 @@ class LightningTrainer(pl.LightningModule):
         with MemoryContext("METRIC_TRACKER_UPDATE"):
             # Update tracker with optimal F1 if available, otherwise fall back to default
             metrics_to_track = val_metrics.copy()
-            if 'best_f1' in locals():
-                 metrics_to_track['f1_score'] = best_f1
             self.metric_tracker.update(self.current_epoch, metrics_to_track)
         trace_memory_line()  # After metric tracking
         
@@ -689,8 +689,8 @@ def create_trainer(config: DictConfig,
     # MODIFIED: Checkpoint based on the new optimal F1 score
     checkpoint_callback = ModelCheckpoint(
         dirpath=f"checkpoints/{experiment_name}",
-        filename="{epoch:02d}-{val_f1_optimal:.3f}",
-        monitor="val_f1_optimal", # Monitor the optimal F1 score
+        filename="{epoch:02d}-{val_average_precision:.3f}",
+        monitor="val_average_precision", # Monitor AUC-PR
         mode="max",
         save_top_k=int(config.training.save_top_k),  # FIX: Ensure it's an integer
         save_last=True,
@@ -701,11 +701,11 @@ def create_trainer(config: DictConfig,
     # Early stopping
     # MODIFIED: Early stop based on the new optimal F1 score
     early_stop_callback = EarlyStopping(
-        monitor="val_f1_optimal", # Monitor the optimal F1 score
+        monitor="val_average_precision", # Monitor AUC-PR
         mode="max",
         patience=int(config.training.patience),  # FIX: Ensure it's an integer
         min_delta=float(config.training.min_delta),  # FIX: Ensure it's a float
-        verbose=True
+        verbose=True    
     )
     callbacks.append(early_stop_callback)
     

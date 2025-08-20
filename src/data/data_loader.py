@@ -386,7 +386,7 @@ class LightningDataModule(pl.LightningDataModule):
                 num_workers=getattr(self.data_config, 'num_workers', 0),
                 pin_memory=getattr(self.data_config, 'pin_memory', False),
                 drop_last=True,
-                persistent_workers=True if getattr(self.data_config, 'num_workers', 0) > 0 else False
+                persistent_workers=getattr(self.data_config, 'persistent_workers', False)
             )
         
         if self.debug_manager.memory_tracking:
@@ -413,7 +413,7 @@ class LightningDataModule(pl.LightningDataModule):
                 num_workers=getattr(self.data_config, 'num_workers', 0),
                 pin_memory=getattr(self.data_config, 'pin_memory', False),
                 drop_last=False,
-                persistent_workers=True if getattr(self.data_config, 'num_workers', 0) > 0 else False
+                persistent_workers=getattr(self.data_config, 'persistent_workers', False)
             )
         
         if self.debug_manager.memory_tracking:
@@ -444,7 +444,7 @@ class LightningDataModule(pl.LightningDataModule):
                 num_workers=getattr(self.data_config, 'num_workers', 0),
                 pin_memory=getattr(self.data_config, 'pin_memory', False),
                 drop_last=False,
-                persistent_workers=True if getattr(self.data_config, 'num_workers', 0) > 0 else False
+                persistent_workers=getattr(self.data_config, 'persistent_workers', False)
             )
         
         if self.debug_manager.memory_tracking:

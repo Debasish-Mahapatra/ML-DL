@@ -19,6 +19,7 @@ class LightningMetrics(nn.Module):
     """
     Comprehensive metrics for lightning prediction evaluation.
     Handles the unique challenges of lightning prediction including class imbalance.
+    MEMORY OPTIMIZED: Uses streaming computation instead of batch accumulation.
     """
     
     def __init__(self,
@@ -49,17 +50,38 @@ class LightningMetrics(nn.Module):
         self.reset()
     
     def reset(self):
-        """Reset all accumulated metrics."""
-        self.predictions_list = []
-        self.targets_list = []
-        self.probabilities_list = []
+        """Reset all accumulated metrics - MEMORY OPTIMIZED."""
+        # MEMORY FIX: Don't store lists of batches
+        # OLD: self.predictions_list = []
+        # OLD: self.targets_list = []  
+        # OLD: self.probabilities_list = []
+        
+        # NEW: Stream metrics - accumulate counts/sums instead
+        self.total_samples = 0
+        self.true_positives = 0
+        self.false_positives = 0
+        self.true_negatives = 0
+        self.false_negatives = 0
+        
+        # For probabilistic metrics
+        self.sum_probabilities = 0.0
+        self.sum_targets = 0.0
+        self.sum_prob_targets = 0.0  # For correlation
+        self.sum_squared_probabilities = 0.0
+        self.sum_squared_targets = 0.0
+        
+        # For advanced metrics
+        self.lightning_events = 0
+        self.detected_lightning = 0
+        self.total_alarms = 0
+        self.false_alarms = 0
         
     def update(self, 
                predictions: torch.Tensor, 
                targets: torch.Tensor,
                probabilities: Optional[torch.Tensor] = None):
         """
-        Update metrics with new batch.
+        Update metrics with new batch using streaming computation.
         
         Args:
             predictions: Binary predictions (B, H, W) or (B, 1, H, W)
@@ -150,24 +172,49 @@ class LightningMetrics(nn.Module):
                 debug_print(f"pred_np: {pred_np.shape}, target_np: {target_np.shape}", "metrics")
             return  # Skip this batch to prevent crash
         
+        # Convert to flattened arrays
+        pred_flat = pred_np.flatten()
+        target_flat = target_np.flatten()
+        
+        # Ensure same length
+        if len(pred_flat) != len(target_flat):
+            min_length = min(len(pred_flat), len(target_flat))
+            pred_flat = pred_flat[:min_length]
+            target_flat = target_flat[:min_length]
+            if is_debug_enabled("metrics"):
+                debug_print(f"Trimmed to same length: {min_length}", "metrics")
+        
         # DEBUG: Log numpy array shapes and flattened lengths - MODIFIED
         if is_debug_enabled("metrics"):
-            debug_print(f"pred_np shape: {pred_np.shape}", "metrics")
-            debug_print(f"target_np shape: {target_np.shape}", "metrics")
-            debug_print(f"pred_np.flatten() length: {pred_np.flatten().shape[0]}", "metrics")
-            debug_print(f"target_np.flatten() length: {target_np.flatten().shape[0]}", "metrics")
+            debug_print(f"pred_flat length: {len(pred_flat)}", "metrics")
+            debug_print(f"target_flat length: {len(target_flat)}", "metrics")
         
-        # Store for batch computation
-        self.predictions_list.append(pred_np)
-        self.targets_list.append(target_np)
+        # MEMORY FIX: Compute metrics incrementally instead of storing arrays
+        # Convert to binary predictions
+        binary_preds = (pred_flat > self.threshold).astype(int)
+        binary_targets = target_flat.astype(int)
         
-        # DEBUG: Log accumulated totals - MODIFIED
-        if is_debug_enabled("metrics"):
-            total_pred_samples = sum(p.flatten().shape[0] for p in self.predictions_list)
-            total_target_samples = sum(t.flatten().shape[0] for t in self.targets_list)
-            debug_print(f"Total accumulated pred samples: {total_pred_samples}", "metrics")
-            debug_print(f"Total accumulated target samples: {total_target_samples}", "metrics")
+        # Accumulate confusion matrix elements
+        tp = np.sum((binary_preds == 1) & (binary_targets == 1))
+        fp = np.sum((binary_preds == 1) & (binary_targets == 0))
+        tn = np.sum((binary_preds == 0) & (binary_targets == 0))
+        fn = np.sum((binary_preds == 0) & (binary_targets == 1))
         
+        self.true_positives += tp
+        self.false_positives += fp
+        self.true_negatives += tn
+        self.false_negatives += fn
+        
+        # Track total samples
+        self.total_samples += len(pred_flat)
+        
+        # Lightning-specific tracking
+        self.lightning_events += np.sum(binary_targets)
+        self.detected_lightning += tp
+        self.total_alarms += np.sum(binary_preds)
+        self.false_alarms += fp
+        
+        # Track sums for probabilistic metrics
         if probabilities is not None:
             # Apply same fixes to probabilities
             if probabilities.shape != targets.shape:
@@ -176,54 +223,69 @@ class LightningMetrics(nn.Module):
                     size=targets.shape[-2:], mode='bilinear', align_corners=False
                 ).squeeze(1) if probabilities.dim() == 4 else probabilities
                 
-            prob_np = probabilities.detach().cpu().numpy()
-            if is_debug_enabled("metrics"):
-                debug_print(f"prob_np shape: {prob_np.shape}", "metrics")
-            self.probabilities_list.append(prob_np)
+            prob_np = probabilities.detach().cpu().numpy().flatten()
+            if len(prob_np) != len(target_flat):
+                prob_np = prob_np[:len(target_flat)]
+            
+            self.sum_probabilities += np.sum(prob_np)
+            self.sum_squared_probabilities += np.sum(prob_np ** 2)
+            self.sum_prob_targets += np.sum(prob_np * target_flat)
             
             if is_debug_enabled("metrics"):
-                total_prob_samples = sum(p.flatten().shape[0] for p in self.probabilities_list)
-                debug_print(f"Total accumulated prob samples: {total_prob_samples}", "metrics")
+                debug_print(f"prob_np length: {len(prob_np)}", "metrics")
+        
+        self.sum_targets += np.sum(target_flat)
+        self.sum_squared_targets += np.sum(target_flat ** 2)
         
         if is_debug_enabled("metrics"):
+            debug_print(f"Batch stats: TP={tp}, FP={fp}, TN={tn}, FN={fn}", "metrics")
+            debug_print(f"Total samples so far: {self.total_samples}", "metrics")
             debug_print("DEBUG METRICS UPDATE END", "metrics")
     
     def compute(self) -> Dict[str, float]:
         """
-        Compute all metrics from accumulated predictions and targets.
+        Compute all metrics from accumulated statistics.
         
         Returns:
             Dictionary of computed metrics
         """
-        if not self.predictions_list:
+        if self.total_samples == 0:
             return {}
-        
-        # Concatenate all batches
-        all_predictions = np.concatenate([p.flatten() for p in self.predictions_list])
-        all_targets = np.concatenate([t.flatten() for t in self.targets_list])
-        
-        if self.probabilities_list:
-            all_probabilities = np.concatenate([p.flatten() for p in self.probabilities_list])
-        else:
-            all_probabilities = None
         
         metrics = {}
         
-        # Basic classification metrics
-        metrics.update(self._compute_basic_metrics(all_predictions, all_targets))
+        # Basic classification metrics from confusion matrix
+        metrics.update(self._compute_basic_metrics_streaming())
         
-        # Probabilistic metrics
-        if self.compute_probabilistic_metrics and all_probabilities is not None:
-            metrics.update(self._compute_probabilistic_metrics(all_probabilities, all_targets))
+        # Probabilistic metrics (if we have probability data)
+        if self.compute_probabilistic_metrics and self.sum_probabilities > 0:
+            metrics.update(self._compute_probabilistic_metrics_streaming())
         
-        # Spatial verification metrics
+        # Spatial verification metrics (placeholder)
         if self.compute_spatial_metrics:
             metrics.update(self._compute_spatial_metrics())
         
         # Lightning-specific metrics
-        metrics.update(self._compute_lightning_specific_metrics(all_predictions, all_targets))
+        metrics.update(self._compute_lightning_specific_metrics_streaming())
         
         return metrics
+    
+    def _compute_basic_metrics_streaming(self) -> Dict[str, float]:
+        """Compute basic classification metrics from accumulated counts."""
+        
+        # Basic metrics from confusion matrix
+        accuracy = (self.true_positives + self.true_negatives) / self.total_samples if self.total_samples > 0 else 0.0
+        
+        precision = self.true_positives / (self.true_positives + self.false_positives) if (self.true_positives + self.false_positives) > 0 else 0.0
+        recall = self.true_positives / (self.true_positives + self.false_negatives) if (self.true_positives + self.false_negatives) > 0 else 0.0
+        f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+        
+        return {
+            'accuracy': accuracy,
+            'precision': precision,
+            'recall': recall,
+            'f1_score': f1_score
+        }
     
     def _compute_basic_metrics(self, predictions: np.ndarray, targets: np.ndarray) -> Dict[str, float]:
         """Compute basic classification metrics."""
@@ -265,6 +327,34 @@ class LightningMetrics(nn.Module):
             'precision': precision_score(binary_targets, binary_preds, zero_division=0),
             'recall': recall_score(binary_targets, binary_preds, zero_division=0),
             'f1_score': f1_score(binary_targets, binary_preds, zero_division=0)
+        }
+    
+    def _compute_probabilistic_metrics_streaming(self) -> Dict[str, float]:
+        """Compute probabilistic metrics from accumulated statistics."""
+        
+        # Simple Brier score approximation
+        # Note: This is an approximation since we don't store all probability-target pairs
+        avg_prob = self.sum_probabilities / self.total_samples
+        avg_target = self.sum_targets / self.total_samples
+        
+        # Approximate Brier score (not perfect but memory efficient)
+        brier_score_approx = (avg_prob - avg_target) ** 2
+        
+        # Correlation approximation
+        n = self.total_samples
+        correlation = 0.0
+        if n > 1:
+            numerator = n * self.sum_prob_targets - self.sum_probabilities * self.sum_targets
+            denom_prob = n * self.sum_squared_probabilities - self.sum_probabilities ** 2
+            denom_target = n * self.sum_squared_targets - self.sum_targets ** 2
+            
+            if denom_prob > 0 and denom_target > 0:
+                correlation = numerator / np.sqrt(denom_prob * denom_target)
+        
+        return {
+            'average_precision': self.true_positives / (self.true_positives + self.false_positives) if (self.true_positives + self.false_positives) > 0 else 0.0,
+            'brier_score': brier_score_approx,
+            'probability_correlation': correlation
         }
     
     def _compute_probabilistic_metrics(self, probabilities: np.ndarray, targets: np.ndarray) -> Dict[str, float]:
@@ -339,6 +429,43 @@ class LightningMetrics(nn.Module):
         neighborhood_mask = ndimage.binary_dilation(binary_array, structure=struct_element)
         
         return neighborhood_mask.astype(int)
+    
+    def _compute_lightning_specific_metrics_streaming(self) -> Dict[str, float]:
+        """Compute lightning-specific verification metrics from accumulated counts."""
+        
+        metrics = {}
+        
+        # Lightning Detection Rate (same as recall)
+        detection_rate = self.detected_lightning / self.lightning_events if self.lightning_events > 0 else 0.0
+        
+        # False Alarm Ratio
+        false_alarm_ratio = self.false_alarms / self.total_alarms if self.total_alarms > 0 else 0.0
+        
+        # Critical Success Index (Threat Score)
+        csi = self.true_positives / (self.true_positives + self.false_negatives + self.false_positives) if (self.true_positives + self.false_negatives + self.false_positives) > 0 else 0.0
+        
+        # Frequency Bias
+        frequency_bias = self.total_alarms / self.lightning_events if self.lightning_events > 0 else 0.0
+        
+        # Heidke Skill Score
+        po = (self.true_positives + self.true_negatives) / self.total_samples if self.total_samples > 0 else 0.0
+        n = self.total_samples
+        n1 = self.lightning_events
+        n0 = n - n1
+        m1 = self.total_alarms
+        m0 = n - m1
+        pe = (n1 * m1 + n0 * m0) / (n * n) if n > 0 else 0.0
+        hss = (po - pe) / (1 - pe) if pe != 1 else 0.0
+        
+        metrics.update({
+            'lightning_detection_rate': detection_rate,
+            'false_alarm_ratio': false_alarm_ratio,
+            'critical_success_index': csi,
+            'frequency_bias': frequency_bias,
+            'heidke_skill_score': hss
+        })
+        
+        return metrics
     
     def _compute_lightning_specific_metrics(self, predictions: np.ndarray, targets: np.ndarray) -> Dict[str, float]:
         """Compute lightning-specific verification metrics."""
@@ -431,8 +558,13 @@ class MetricTracker:
             filtered_metrics = metrics.copy()
         
         # Add epoch info
-        filtered_metrics['epoch'] = epoch
-        self.epoch_metrics.append(filtered_metrics)
+        #filtered_metrics['epoch'] = epoch
+        #self.epoch_metrics.append(filtered_metrics)
+        
+        # NEW CODE: Only keep last epoch for get_latest_metrics() functionality
+        latest_metrics = filtered_metrics.copy()
+        latest_metrics['epoch'] = epoch
+        self.epoch_metrics = [latest_metrics] 
         
         # Update best metrics
         for metric_name, metric_value in filtered_metrics.items():

@@ -91,25 +91,32 @@ class DataPreprocessor:
     def preprocess_lightning(self, lightning_data: xr.DataArray) -> torch.Tensor:
         """
         Preprocess lightning ground truth data.
-        
+    
         Args:
             lightning_data: Lightning occurrence data (time, lat, lon)
-            
+        
         Returns:
             Lightning tensor (time, lat, lon)
         """
         # Convert to numpy
         lightning_np = lightning_data.values
-        
+    
+        # Check and fix dimension order if needed
+        # Expected: (time, longitude, latitude) -> shape should be (time, 221, 181)
+        if lightning_np.ndim == 3 and lightning_np.shape[-2:] == (181, 221):
+            # Data is loaded as (time, latitude, longitude) - need to transpose
+            lightning_np = lightning_np.transpose(0, 2, 1)  # -> (time, longitude, latitude)
+            print(f"Fixed lightning dimension order: {lightning_data.shape} -> {lightning_np.shape}")
+    
         # Handle missing values (assume no lightning for missing data)
         lightning_np = np.nan_to_num(lightning_np, nan=0.0)
-        
+    
         # Ensure binary values (0 or 1)
         lightning_np = np.clip(lightning_np, 0, 1)
-        
+    
         # Convert to tensor
         lightning_tensor = torch.from_numpy(lightning_np).float()
-        
+    
         return lightning_tensor
     
     def compute_normalization_stats(self, file_paths: List[str], data_type: str) -> Dict[str, float]:

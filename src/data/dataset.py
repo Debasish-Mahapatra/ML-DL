@@ -9,6 +9,7 @@ import numpy as np
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Union
 import logging
+import random
 from ..utils.io_utils import NetCDFHandler
 from .preprocessing import DataPreprocessor, TemporalProcessor
 
@@ -27,9 +28,9 @@ class LightningDataset(Dataset):
                  spatial_augmentation: Optional[callable] = None,
                  meteorological_augmentation: Optional[callable] = None,
                  cache_terrain: bool = True,
-                 target_cape_shape: Tuple[int, int] = (85, 85),      # CHANGED: Keep at native 25km
+                 target_cape_shape: Tuple[int, int] = (85, 85),
                  target_lightning_shape: Tuple[int, int] = (710, 710),
-                 target_terrain_shape: Tuple[int, int] = (2130, 2130)):  # CHANGED: Keep at native 1km
+                 target_terrain_shape: Tuple[int, int] = (2130, 2130)):
         """
         Initialize Lightning Dataset.
         
@@ -54,21 +55,23 @@ class LightningDataset(Dataset):
         self.cache_terrain = cache_terrain
         
         # Target shapes - UPDATED for multi-resolution approach
-        self.target_cape_shape = target_cape_shape        # Native 25km: (85, 85)
-        self.target_lightning_shape = target_lightning_shape  # 3km: (710, 710)
-        self.target_terrain_shape = target_terrain_shape      # Native 1km: (2130, 2130)
+        self.target_cape_shape = target_cape_shape
+        self.target_lightning_shape = target_lightning_shape
+        self.target_terrain_shape = target_terrain_shape
         
         # Cache for terrain data (static across all samples)
         self._terrain_cache = None
         
-        # Build sample index
+        # Build sample index with CAPE filtering
         self._build_sample_index()
         
     def _build_sample_index(self):
-        """Build index of all valid samples across all files."""
-        self.sample_index = []
+        """Build index of all valid samples across all files with CAPE filtering."""
         
-        logger.info("Building dataset sample index...")
+        self.sample_index = []
+        background_samples = []  # Store low-CAPE samples
+        
+        logger.info("Building dataset sample index with CAPE filtering...")
         
         for file_idx, file_dict in enumerate(self.file_pairs):
             try:
@@ -87,13 +90,24 @@ class LightningDataset(Dataset):
                 # Use minimum time dimension
                 num_times = min(cape_times, lightning_times)
                 
-                # Create sample indices for this file
+                # Create sample indices for this file with CAPE filtering
                 for t in range(0, num_times - self.sequence_length + 1, self.temporal_stride):
-                    self.sample_index.append({
+                    # Get CAPE data for this time step
+                    cape_slice = cape_ds['cape'].isel(time=slice(t, t + self.sequence_length))
+                    max_cape = float(cape_slice.max().values)
+                    
+                    sample = {
                         'file_idx': file_idx,
                         'time_start': t,
-                        'time_end': t + self.sequence_length
-                    })
+                        'time_end': t + self.sequence_length,
+                        'max_cape': max_cape
+                    }
+                    
+                    # CAPE filtering logic
+                    if max_cape >= 100.0:  # Keep samples with significant CAPE
+                        self.sample_index.append(sample)
+                    else:
+                        background_samples.append(sample)  # Store for background sampling
                 
                 cape_ds.close()
                 lightning_ds.close()
@@ -102,13 +116,23 @@ class LightningDataset(Dataset):
                 logger.warning(f"Error processing file pair {file_idx}: {e}")
                 continue
         
-        logger.info(f"Built dataset index with {len(self.sample_index)} samples")
+        # Add 5% of background samples randomly
+        background_keep = int(len(background_samples) * 0.05)
+        if background_keep > 0:
+            random.shuffle(background_samples)
+            self.sample_index.extend(background_samples[:background_keep])
+        
+        logger.info(f"CAPE filtering results:")
+        logger.info(f"  High CAPE samples (≥100 J/kg): {len(self.sample_index) - background_keep}")
+        logger.info(f"  Background samples kept: {background_keep}")
+        logger.info(f"  Total samples: {len(self.sample_index)}")
+        logger.info(f"  Filtering removed: {len(background_samples) - background_keep:,} low-CAPE samples")
         
         if len(self.sample_index) == 0:
-            raise RuntimeError("No valid samples found in dataset")
+            raise RuntimeError("No valid samples found in dataset after CAPE filtering")
     
     def _load_terrain(self, terrain_path: Path) -> torch.Tensor:
-        """Load and cache terrain data at native 1km resolution."""  # CHANGED: Note native resolution
+        """Load and cache terrain data at native 1km resolution."""
         if self.cache_terrain and self._terrain_cache is not None:
             return self._terrain_cache
         
@@ -134,7 +158,7 @@ class LightningDataset(Dataset):
             return torch.zeros(1, *self.target_terrain_shape)
     
     def _load_cape(self, cape_path: Path, time_start: int, time_end: int) -> torch.Tensor:
-        """Load CAPE data at native 25km resolution."""  # CHANGED: Note native resolution
+        """Load CAPE data at native 25km resolution."""
         try:
             cape_ds = NetCDFHandler.load_netcdf(cape_path, variables=['cape'])
             
@@ -202,7 +226,7 @@ class LightningDataset(Dataset):
         sample_info = self.sample_index[idx]
         file_dict = self.file_pairs[sample_info['file_idx']]
         
-        # Load data at native resolutions - NO UPSAMPLING
+        # Load data at native resolutions
         cape_tensor = self._load_cape(file_dict['cape'], 
                                      sample_info['time_start'], 
                                      sample_info['time_end'])
@@ -228,9 +252,9 @@ class LightningDataset(Dataset):
             cape_tensor = self.meteorological_augmentation(cape_tensor)
         
         sample = {
-            'cape': cape_tensor,        # Native 25km: (1, 85, 85)
-            'terrain': terrain_tensor,  # Native 1km: (1, 2130, 2130) 
-            'lightning': lightning_tensor,  # 3km: (710, 710)
+            'cape': cape_tensor,
+            'terrain': terrain_tensor,
+            'lightning': lightning_tensor,
             'file_idx': sample_info['file_idx'],
             'time_start': sample_info['time_start']
         }

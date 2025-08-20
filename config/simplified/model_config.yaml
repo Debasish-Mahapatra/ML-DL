@@ -1,0 +1,78 @@
+# =============================================================================
+# FILE 2: config/simplified/model_config.yaml
+# =============================================================================
+
+model:
+  name: "LightningPredictor"
+  
+  # Architecture Components - MUST MATCH YOUR CODE
+  encoders:
+    cape:
+      type: "CNN2D"
+      channels: [16, 32, 64]        # Smaller network
+      kernel_sizes: [7, 5, 3]
+      activation: "relu"
+      dropout: 0.1
+      
+    era5:
+      type: "CNN3D"
+      in_channels: 9
+      pressure_levels: 7
+      channels: [16, 32, 64]
+      kernel_sizes: [3, 3, 3]
+      activation: "relu"
+      dropout: 0.1
+      
+    terrain:
+      type: "TerrainEncoder"
+      embedding_dim: 32             # Smaller
+      learnable_downsample: true
+      downsample_method: "learned_conv"
+      
+  # Fusion Components
+  fusion:
+    meteorological:
+      type: "FeatureFusion"
+      fusion_method: "concatenation"
+      hidden_dim: 128               # Smaller
+      
+    multiscale:
+      type: "TerrainGuidedUpsampling"
+      upsampling_factor: 8.33
+      guidance_weight: 0.3
+      
+  # Core Processing - EfficientConvNet
+  gnn:
+    type: "EfficientConvNet"
+    hidden_dim: 32                  # Much smaller
+    num_layers: 2
+    num_heads: 2
+    dropout: 0.1
+    kernel_sizes: [3, 5, 7]
+    use_multiscale: true
+    use_attention: true
+    
+  # Patch-Based Transformer
+  transformer:
+    type: "PatchBasedTransformer"
+    hidden_dim: 32                  # Much smaller
+    num_layers: 2
+    num_heads: 2
+    dropout: 0.1
+    attention_type: "linear"
+    target_patches_per_dim: 25
+    max_patch_size: 32
+    min_patch_size: 16
+    
+  # Output Head
+  prediction_head:
+    hidden_dim: 64                  # Smaller
+    output_dim: 1
+    activation: "sigmoid"
+    
+  # Domain Adaptation
+  domain_adapter:
+    terrain_adaptation_dim: 32
+    meteorological_adaptation_dim: 16
+    dropout: 0.1
+

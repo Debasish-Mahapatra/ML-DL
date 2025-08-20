@@ -1,0 +1,63 @@
+# =============================================================================
+# FILE 3: config/simplified/data_config.yaml
+# =============================================================================
+
+data:
+  # Paths
+  root_dir: "data/processed"
+  splits_dir: "data/splits"
+  
+  # Splits configuration
+  splits:
+    train: "train_files.txt"
+    val: "val_files.txt"
+    test: "test_files.txt"
+  
+  # Batch settings
+  batch_size: 8
+  num_workers: 2
+  pin_memory: true
+  persistent_workers: false
+  
+  # CORRECTED Grid sizes based on your cdo sinfo output
+  domain:
+    name: "odisha"
+    grid_size_25km: [19, 26]        # CAPE: 26x19 (width x height)
+    grid_size_3km: [221, 181]       # Lightning: 221x181 (width x height)  
+    grid_size_1km: [660, 553]       # Terrain: 660x553 (width x height)
+  
+  # Temporal settings
+  temporal:
+    sequence_length: 1
+    temporal_stride: 1
+    
+  # Preprocessing
+  preprocessing:
+    normalize: true
+    standardize: false
+    cape_max_value: 5000.0
+    terrain_max_value: 3000.0
+    
+  # Augmentation - disabled for debugging
+  augmentation:
+    spatial:
+      enabled: false
+    meteorological:
+      enabled: false
+
+# =============================================================================
+# USAGE INSTRUCTIONS:
+# =============================================================================
+
+# 1. Save each section above as the respective file:
+#    - config/simplified/training_config.yaml
+#    - config/simplified/model_config.yaml  
+#    - config/simplified/data_config.yaml
+
+# 2. Modify your shell script to use simplified configs:
+#    Change: CONFIG_DIR="config/simplified"
+
+# 3. Run training:
+#    ./run_lightning_prediction.sh --skip-preprocess
+
+# This should eliminate all the missing key errors!

@@ -43,8 +43,8 @@ training:
     type: "simple"
     primary: "focal"
     physics_weight: 0.0
-    focal_alpha: 0.5
-    focal_gamma: 1.5
+    focal_alpha: 0.99
+    focal_gamma: 3.0
     label_smoothing: 0.0
     adaptive_weights: false
     adaptive_weighting: false

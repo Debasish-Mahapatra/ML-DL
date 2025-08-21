@@ -1,6 +1,5 @@
-# =============================================================================
-# FILE 3: config/simplified/data_config.yaml
-# =============================================================================
+# CORRECTED Data Configuration for config/simplified/data_config.yaml
+# Fixed coordinate order inconsistencies
 
 data:
   # Paths
@@ -19,12 +18,14 @@ data:
   pin_memory: true
   persistent_workers: false
   
-  # CORRECTED Grid sizes based on your cdo sinfo output
+  # CRITICAL FIX: Corrected grid sizes to match actual data dimensions
+  # All shapes follow [latitude, longitude] convention consistently
   domain:
     name: "odisha"
-    grid_size_25km: [19, 26]        # CAPE: 26x19 (width x height)
-    grid_size_3km: [221, 181]       # Lightning: 221x181 (width x height)  
-    grid_size_1km: [660, 553]       # Terrain: 660x553 (width x height)
+    # FIXED: All dimensions now follow [latitude, longitude] order
+    grid_size_25km: [19, 26]        # CAPE: (lat=19, lon=26) ✅ 
+    grid_size_3km: [181, 221]       # Lightning: (latitude=181, longitude=221) ✅
+    grid_size_1km: [553, 660]       # Terrain: (lat=553, lon=660) ✅
   
   # Temporal settings
   temporal:
@@ -44,20 +45,30 @@ data:
       enabled: false
     meteorological:
       enabled: false
+  
+  # CAPE Filtering Configuration
+  cape_filtering:
+    enabled: true
+    threshold: 100.0              # CAPE threshold in J/kg  
+    neighborhood_radius: 1        # 1 pixel = 25km radius
+    background_sample_ratio: 0.05 # 5% background samples
+    spatial_filtering: true       # Enable spatial analysis
+
+
 
 # =============================================================================
-# USAGE INSTRUCTIONS:
+# COORDINATE ORDER VERIFICATION:
 # =============================================================================
-
-# 1. Save each section above as the respective file:
-#    - config/simplified/training_config.yaml
-#    - config/simplified/model_config.yaml  
-#    - config/simplified/data_config.yaml
-
-# 2. Modify your shell script to use simplified configs:
-#    Change: CONFIG_DIR="config/simplified"
-
-# 3. Run training:
-#    ./run_lightning_prediction.sh --skip-preprocess
-
-# This should eliminate all the missing key errors!
+# 
+# Your actual data shapes:
+# - CAPE: (time=744, lat=19, lon=26)
+# - Lightning: (time=744, latitude=181, longitude=221)  
+# - Terrain: (lat=553, lon=660)
+#
+# Geographic verification:
+# - Odisha: 81.16-87.53°E (6.37° span), 17.76-22.63°N (4.87° span)
+# - Longitude span > Latitude span ✓
+# - More longitude points than latitude points ✓
+#
+# Config shapes now match data: [latitude, longitude]
+# =============================================================================

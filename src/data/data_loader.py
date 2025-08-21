@@ -1,5 +1,6 @@
 """
 PyTorch Lightning DataModule for efficient data loading.
+UPDATED: Added CAPE filtering configuration support and complete implementation.
 """
 
 import pytorch_lightning as pl
@@ -27,6 +28,7 @@ class LightningDataModule(pl.LightningDataModule):
     """
     PyTorch Lightning DataModule for lightning prediction.
     Handles data loading, preprocessing, and augmentation.
+    ENHANCED: Now supports configurable CAPE filtering.
     """
     
     def __init__(self, config: DictConfig):
@@ -224,8 +226,7 @@ class LightningDataModule(pl.LightningDataModule):
         return file_pairs
     
     def _setup_preprocessor(self):
-        """Initialize data preprocessor with normalization statistics - CORRECTED."""
-        
+        """Initialize data preprocessor with normalization statistics."""
         if self.debug_manager.verbose_logging:
             debug_print("Setting up data preprocessor", "verbose")
         
@@ -251,7 +252,7 @@ class LightningDataModule(pl.LightningDataModule):
                 else:
                     logger.warning(f"Failed to load stats from {stats_file}: {e}")
 
-        # CORRECTED: Use the actual constructor parameters
+        # Use the actual constructor parameters
         self.preprocessor = DataPreprocessor(
             cape_stats=cape_stats,
             terrain_stats=terrain_stats
@@ -262,7 +263,6 @@ class LightningDataModule(pl.LightningDataModule):
     
     def _setup_augmentations(self):
         """Setup data augmentations."""
-        
         # Check if augmentation is enabled
         if not getattr(self.data_config, 'augmentation', {}).get('enabled', False):
             if self.debug_manager.verbose_logging:
@@ -297,16 +297,47 @@ class LightningDataModule(pl.LightningDataModule):
             if self.debug_manager.verbose_logging:
                 debug_print("Meteorological augmentation enabled", "verbose")
     
-    def _setup_train_val_datasets(self):
-        """Setup training and validation datasets."""
+    def _get_cape_filtering_config(self) -> Dict[str, any]:
+        """
+        Get CAPE filtering configuration from config with defaults.
         
+        Returns:
+            Dictionary with CAPE filtering parameters
+        """
+        # Get CAPE filtering config with defaults
+        cape_config = getattr(self.data_config, 'cape_filtering', {})
+        
+        cape_filtering_kwargs = {
+            'cape_threshold': cape_config.get('threshold', 100.0),
+            'neighborhood_radius': cape_config.get('neighborhood_radius', 1),  # CORRECTED: 1 pixel = 25km
+            'background_sample_ratio': cape_config.get('background_sample_ratio', 0.05),
+            'spatial_filtering': cape_config.get('spatial_filtering', True)
+        }
+        
+        # ENHANCED LOGGING: Show CAPE filtering config
+        print(f"🔧 CAPE Filtering Configuration:")
+        print(f"  Threshold: {cape_filtering_kwargs['cape_threshold']} J/kg")
+        print(f"  Neighborhood radius: {cape_filtering_kwargs['neighborhood_radius']} pixels ({cape_filtering_kwargs['neighborhood_radius'] * 25} km)")
+        print(f"  Background sample ratio: {cape_filtering_kwargs['background_sample_ratio']:.1%}")
+        print(f"  Spatial filtering: {cape_filtering_kwargs['spatial_filtering']}")
+        
+        if self.debug_manager.verbose_logging:
+            debug_print(f"CAPE filtering config: {cape_filtering_kwargs}", "verbose")
+        
+        return cape_filtering_kwargs
+    
+    def _setup_train_val_datasets(self):
+        """Setup training and validation datasets with CAPE filtering config."""
         if self.debug_manager.verbose_logging:
             debug_print("Setting up training and validation datasets", "verbose")
         
-        # FIXED: Get target shapes from config WITHOUT fallbacks - force errors if missing
+        # Get target shapes from config WITHOUT fallbacks - force errors if missing
         target_cape_shape = tuple(self.data_config.domain.grid_size_25km)
         target_lightning_shape = tuple(self.data_config.domain.grid_size_3km)
         target_terrain_shape = tuple(self.data_config.domain.grid_size_1km)
+        
+        # NEW: Get CAPE filtering configuration
+        cape_filtering_kwargs = self._get_cape_filtering_config()
         
         if self.debug_manager.verbose_logging:
             debug_print(f"Target shapes - CAPE: {target_cape_shape}, Lightning: {target_lightning_shape}, Terrain: {target_terrain_shape}", "verbose")
@@ -315,12 +346,13 @@ class LightningDataModule(pl.LightningDataModule):
         self.train_dataset = LightningDataset(
             file_pairs=self.train_files,
             preprocessor=self.preprocessor,
+            target_cape_shape=target_cape_shape,
+            target_lightning_shape=target_lightning_shape,
+            target_terrain_shape=target_terrain_shape,
             sequence_length=getattr(self.data_config.temporal, 'sequence_length', 1),
             spatial_augmentation=self.spatial_augmentation,
             meteorological_augmentation=self.meteorological_augmentation,
-            target_cape_shape=target_cape_shape,
-            target_lightning_shape=target_lightning_shape,
-            target_terrain_shape=target_terrain_shape
+            **cape_filtering_kwargs  # NEW: Pass CAPE filtering config
         )
         
         if self.debug_manager.batch_info:
@@ -330,12 +362,13 @@ class LightningDataModule(pl.LightningDataModule):
         self.val_dataset = LightningDataset(
             file_pairs=self.val_files,
             preprocessor=self.preprocessor,
+            target_cape_shape=target_cape_shape,
+            target_lightning_shape=target_lightning_shape,
+            target_terrain_shape=target_terrain_shape,
             sequence_length=getattr(self.data_config.temporal, 'sequence_length', 1),
             spatial_augmentation=None,
             meteorological_augmentation=None,
-            target_cape_shape=target_cape_shape,
-            target_lightning_shape=target_lightning_shape,
-            target_terrain_shape=target_terrain_shape
+            **cape_filtering_kwargs  # NEW: Pass CAPE filtering config
         )
         
         if self.debug_manager.batch_info:
@@ -343,15 +376,17 @@ class LightningDataModule(pl.LightningDataModule):
    
     def _setup_test_dataset(self):
         """Setup test dataset."""
-        
         if self.test_files:
             if self.debug_manager.verbose_logging:
                 debug_print("Setting up test dataset", "verbose")
             
-            # FIXED: Get target shapes from config WITHOUT fallbacks - force errors if missing
+            # Get target shapes from config WITHOUT fallbacks - force errors if missing
             target_cape_shape = tuple(self.data_config.domain.grid_size_25km)
             target_lightning_shape = tuple(self.data_config.domain.grid_size_3km)
             target_terrain_shape = tuple(self.data_config.domain.grid_size_1km)
+            
+            # NEW: Get CAPE filtering configuration
+            cape_filtering_kwargs = self._get_cape_filtering_config()
             
             if self.debug_manager.verbose_logging:
                 debug_print(f"Test target shapes - CAPE: {target_cape_shape}, Lightning: {target_lightning_shape}, Terrain: {target_terrain_shape}", "verbose")
@@ -359,12 +394,13 @@ class LightningDataModule(pl.LightningDataModule):
             self.test_dataset = LightningDataset(
                 file_pairs=self.test_files,
                 preprocessor=self.preprocessor,
+                target_cape_shape=target_cape_shape,
+                target_lightning_shape=target_lightning_shape,
+                target_terrain_shape=target_terrain_shape,
                 sequence_length=getattr(self.data_config.temporal, 'sequence_length', 1),
                 spatial_augmentation=None,
                 meteorological_augmentation=None,
-                target_cape_shape=target_cape_shape,
-                target_lightning_shape=target_lightning_shape,
-                target_terrain_shape=target_terrain_shape
+                **cape_filtering_kwargs  # NEW: Pass CAPE filtering config
             )
             
             if self.debug_manager.batch_info:
@@ -374,7 +410,7 @@ class LightningDataModule(pl.LightningDataModule):
     def train_dataloader(self) -> DataLoader:
         """Create training dataloader with conditional memory tracking."""
         
-        # Conditional memory tracing - MODIFIED
+        # Conditional memory tracing
         if self.debug_manager.memory_tracking:
             self.debug_manager.conditional_trace_memory("BEFORE_TRAIN_DATALOADER_CREATION")
         
@@ -401,7 +437,7 @@ class LightningDataModule(pl.LightningDataModule):
     def val_dataloader(self) -> DataLoader:
         """Create validation dataloader with conditional memory tracking."""
         
-        # Conditional memory tracing - MODIFIED
+        # Conditional memory tracing
         if self.debug_manager.memory_tracking:
             self.debug_manager.conditional_trace_memory("BEFORE_VAL_DATALOADER_CREATION")
         
@@ -423,7 +459,7 @@ class LightningDataModule(pl.LightningDataModule):
             debug_print(f"Validation dataloader created: batch_size={self.data_config.batch_size}", "batch")
         
         return dataloader
-   
+    
     @memory_checkpoint("TEST_DATALOADER")
     def test_dataloader(self) -> Optional[DataLoader]:
         """Create test dataloader with conditional memory tracking."""
@@ -432,7 +468,7 @@ class LightningDataModule(pl.LightningDataModule):
                 debug_print("No test dataset available", "verbose")
             return None
         
-        # Conditional memory tracing - MODIFIED
+        # Conditional memory tracing
         if self.debug_manager.memory_tracking:
             self.debug_manager.conditional_trace_memory("BEFORE_TEST_DATALOADER_CREATION")
         

@@ -63,7 +63,17 @@ model:
     max_patch_size: 32          # Keep same
     min_patch_size: 16          # Keep same
     
-  # Output Head
+  # --- NEW: Configuration for the Two-Stage Model Heads ---
+
+  # Stage A: Convection Prediction Head
+  # If this section is present, the model will operate in two-stage mode.
+  # If you remove or comment out this section, it will revert to the original single-stage model.
+  convection_head:
+    hidden_dim: 64
+    output_dim: 1
+    dropout: 0.1
+
+  # Stage B: Lightning Prediction Head
   prediction_head:
     hidden_dim: 96  # REDUCED from 128
     output_dim: 1

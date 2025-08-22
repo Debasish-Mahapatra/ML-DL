@@ -43,15 +43,20 @@ data:
     grid_size_3km: [181, 221]     # SAME AS OBSERVATION DATA -- THIS IS ALSO THE GRID SIZE THE MODEL WILL GIVE ITS PREDICTION 
     grid_size_1km: [553, 660]
     
+  # --- NEW: Dataset-specific parameters ---
+  dataset:
+    # Defines the CAPE value (J/kg) used to create the Stage A target mask.
+    # Any pixel with CAPE > this value is considered part of the "convective environment".
+    convective_cape_threshold: 100.0
 
   # Temporal Information
   temporal:
+    resolution: "hourly"
     sequence_length: 1
-    temporal_stride: 1
     
   # Data Loading
-  batch_size: 32  # Keep at 1 for memory efficiency
-  num_workers: 1 # Keep at 2
+  batch_size: 16
+  num_workers: 1
   pin_memory: true
   persistent_workers: false
   
@@ -62,34 +67,11 @@ data:
     test: "test_files.txt"
     
   # Augmentation
-  #augmentation:
-  #  spatial:
-  #    rotation: [-30, 30]
-  #    flip_horizontal: 0.5
-  #    flip_vertical: 0.5
-  #  meteorological:
-  #    noise_std: 0.01
-  #    scale_factor: [0.95, 1.05]
-
-
   augmentation:
     spatial:
-      enabled: false
+      rotation: [-30, 30]
+      flip_horizontal: 0.5
+      flip_vertical: 0.5
     meteorological:
-      enabled: false
-
-
-  # CAPE Filtering Configuration
-  cape_filtering:
-    enabled: true
-    threshold: 100.0              # CAPE threshold in J/kg  
-    neighborhood_radius: 1        # 1 pixel = 25km radius
-    background_sample_ratio: 0.05 # 5% background samples
-    spatial_filtering: true       # Enable spatial analysis
-
-
-  preprocessing:
-    normalize: true
-    standardize: false
-    cape_max_value: 5000.0
-    terrain_max_value: 5000.0
+      noise_std: 0.01
+      scale_factor: [0.95, 1.05]

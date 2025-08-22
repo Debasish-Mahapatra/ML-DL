@@ -1,6 +1,8 @@
 """
 Main Lightning Prediction Model Architecture.
 Orchestrates all components into a complete prediction system.
+UPDATED: Added support for a two-stage prediction model where Stage A predicts
+         the convective environment and Stage B predicts lightning.
 """
 
 import torch
@@ -11,19 +13,18 @@ from omegaconf import DictConfig
 
 from .encoders import CAPEEncoder, TerrainEncoder, ERA5Encoder
 from .fusion import MeteorologicalFusion, MultiScaleFusion
-# MODIFIED: Added PatchBasedTransformer import
-from .components import GraphNeuralNetwork, LightweightTransformer, PredictionHead, EfficientConvNet, PatchBasedTransformer
+# MODIFIED: Added PatchBasedTransformer and new ConvectionHead imports
+from .components import (GraphNeuralNetwork, LightweightTransformer, 
+                         PredictionHead, EfficientConvNet, PatchBasedTransformer,
+                         ConvectionHead)
 from .domain_adaptation import DomainAdapter
 
 class LightningPredictor(nn.Module):
     """
     Complete Lightning Prediction Model.
     
-    Architecture Flow:
-    Input Data → Encoders → Meteorological Fusion → Multi-Scale Fusion → 
-    EfficientConvNet → Patch-Based Transformer → Prediction Head → Lightning Probability
-    
-    With Domain Adaptation and Physics Constraints integrated throughout.
+    Can operate in single-stage (lightning only) or two-stage 
+    (convection -> lightning) mode based on configuration.
     """
     
     def __init__(self, config: DictConfig):
@@ -38,6 +39,9 @@ class LightningPredictor(nn.Module):
         self.config = config
         self.model_config = config.model
         
+        # --- NEW: Check if two-stage model is configured ---
+        self.two_stage_model = 'convection_head' in self.model_config
+        
         # Store key parameters
         self.cape_only_mode = True  # Will be False when ERA5 is added
         self.use_domain_adaptation = getattr(config.training, 'domain_adaptation', {}).get('enabled', False)
@@ -46,13 +50,14 @@ class LightningPredictor(nn.Module):
         self._build_encoders()
         self._build_fusion_modules()
         self._build_core_processing()
-        self._build_prediction_head()
+        self._build_prediction_heads() # Renamed for clarity
         self._build_domain_adaptation()
         
         # Initialize physics constraints
         self.physics_weight = getattr(config.training, 'physics', {}).get('charge_separation_weight', 0.05)
         
         print(f"✅ Lightning Prediction Model initialized")
+        print(f"   - Two-Stage Model: {self.two_stage_model}")
         print(f"   - CAPE-only mode: {self.cape_only_mode}")
         print(f"   - Domain adaptation: {self.use_domain_adaptation}")
         print(f"   - Physics constraints: {self.physics_weight > 0}")
@@ -168,19 +173,31 @@ class LightningPredictor(nn.Module):
         print(f"   ✓ Core processing built (ConvNet: {convnet_config.hidden_dim}ch, "
               f"Adaptive Patch Transformer: {transformer_config.hidden_dim}ch)")
     
-    def _build_prediction_head(self):
-        """Build prediction head."""
+    def _build_prediction_heads(self):
+        """Build prediction head(s) based on configuration."""
+        # Stage B: Lightning Prediction Head (always present)
         pred_config = self.model_config.prediction_head
-        
         self.prediction_head = PredictionHead(
             input_channels=self.model_config.transformer.hidden_dim,
             hidden_dim=pred_config.hidden_dim,
             output_dim=pred_config.output_dim,
             activation=pred_config.activation
         )
-        
-        print(f"   ✓ Prediction head built (Output: {pred_config.output_dim}ch)")
-    
+        print(f"   ✓ Lightning head built (Output: {pred_config.output_dim}ch)")
+
+        # --- NEW: Stage A: Convection Prediction Head (optional) ---
+        if self.two_stage_model:
+            convection_config = self.model_config.convection_head
+            self.convection_head = ConvectionHead(
+                input_channels=self.model_config.transformer.hidden_dim,
+                hidden_dim=convection_config.hidden_dim,
+                output_dim=convection_config.output_dim,
+                dropout=convection_config.dropout
+            )
+            print(f"   ✓ Convection head built (Output: {convection_config.output_dim}ch)")
+        else:
+            self.convection_head = None
+
     def _build_domain_adaptation(self):
         """Build domain adaptation module."""
         if self.use_domain_adaptation:
@@ -214,46 +231,30 @@ class LightningPredictor(nn.Module):
         Returns:
             Dictionary containing predictions and intermediate features
         """
+        # Steps 1-6: Feature extraction (same for both model types)
+        # ... (code is identical to original until after transformer)
         batch_size = cape_data.shape[0]
-        
-        # Get target size for 3km lightning output from config
         target_lightning_size = tuple(self.config.data.domain.grid_size_3km)
-        
-        # Step 1: Encode inputs
         cape_features = self.cape_encoder(cape_data)
         terrain_features = self.terrain_encoder(terrain_data, target_lightning_size)
-        
-        # ERA5 encoding (future)
+        era5_features = None
         if era5_data is not None and self.era5_encoder is not None:
             era5_features = self.era5_encoder(era5_data)
-        else:
-            era5_features = None
-        
-        # Step 2: Meteorological fusion
         meteorological_features = self.meteorological_fusion(cape_features, era5_features)
-        
-        # Step 3: Multi-scale fusion (25km → 3km with terrain guidance)
-        # Pass target_lightning_size to ensure 3km output resolution
         fused_features = self.multiscale_fusion(
             meteorological_features, terrain_features, target_size=target_lightning_size
         )
-        
-        # Step 4: Apply domain adaptation if enabled
         if domain_adaptation and self.domain_adapter is not None:
-            adapted_features = self.domain_adapter(
+            processing_features = self.domain_adapter(
                 fused_features, terrain_features, meteorological_features
             )
-            processing_features = adapted_features
         else:
             processing_features = fused_features
-        
-        # Step 5: Core processing - EfficientConvNet for spatial relationships
         convnet_features = self.spatial_processor(processing_features)
-        
-        # Step 6: Core processing - Patch-Based Transformer for patterns (MUCH FASTER!)
         transformer_features = self.transformer(convnet_features)
         
-        # Step 7: Lightning prediction
+        # Step 7: Prediction
+        # Stage B: Lightning prediction (always happens)
         lightning_prediction = self.prediction_head(transformer_features)
         
         # Prepare output dictionary
@@ -266,12 +267,17 @@ class LightningPredictor(nn.Module):
             'convnet_features': convnet_features,
             'transformer_features': transformer_features
         }
+
+        # --- NEW: Stage A: Convection prediction (if enabled) ---
+        if self.two_stage_model:
+            convection_prediction = self.convection_head(transformer_features)
+            output['convection_prediction'] = convection_prediction
         
         if era5_features is not None:
             output['era5_features'] = era5_features
             
-        if domain_adaptation and self.domain_adapter is not None:
-            output['adapted_features'] = adapted_features
+        if domain_adaptation and self.domain_adapter is not None and 'adapted_features' not in output:
+             output['adapted_features'] = processing_features
         
         return output
     
@@ -332,22 +338,28 @@ class LightningPredictor(nn.Module):
         total_params = sum(p.numel() for p in self.parameters())
         trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
         
+        components_info = {
+            'cape_encoder': self.cape_encoder.output_channels,
+            'terrain_encoder': self.terrain_encoder.embedding_dim,
+            'era5_encoder': self.era5_encoder.output_channels if self.era5_encoder else 0,
+            'fusion_output': self.fusion_output_channels,
+            'convnet_hidden': self.model_config.gnn.hidden_dim,
+            'transformer_hidden': self.model_config.transformer.hidden_dim,
+            'lightning_head_output': self.model_config.prediction_head.output_dim
+        }
+        
+        if self.two_stage_model:
+            components_info['convection_head_output'] = self.model_config.convection_head.output_dim
+
         return {
             'total_parameters': total_params,
             'trainable_parameters': trainable_params,
             'cape_only_mode': self.cape_only_mode,
             'domain_adaptation_enabled': self.use_domain_adaptation,
+            'two_stage_model_enabled': self.two_stage_model,
             'physics_weight': self.physics_weight,
             'model_size_mb': total_params * 4 / (1024 * 1024),  # Assuming float32
-            'components': {
-                'cape_encoder': self.cape_encoder.output_channels,
-                'terrain_encoder': self.terrain_encoder.embedding_dim,
-                'era5_encoder': self.era5_encoder.output_channels if self.era5_encoder else 0,
-                'fusion_output': self.fusion_output_channels,
-                'convnet_hidden': self.model_config.gnn.hidden_dim,
-                'transformer_hidden': self.model_config.transformer.hidden_dim,
-                'prediction_output': self.model_config.prediction_head.output_dim
-            }
+            'components': components_info
         }
     
     def freeze_encoders(self):
@@ -376,20 +388,20 @@ class LightningPredictorFactory:
     """Factory class for creating Lightning Predictor models with different configurations."""
     
     @staticmethod
-    def create_cape_only_model(config: DictConfig) -> LightningPredictor:
+    def create_cape_only_model(config: DictConfig) -> "LightningPredictor":
         """Create CAPE-only model (current implementation)."""
         model = LightningPredictor(config)
         return model
     
     @staticmethod
-    def create_full_model(config: DictConfig) -> LightningPredictor:
+    def create_full_model(config: DictConfig) -> "LightningPredictor":
         """Create full model with ERA5 support (future)."""
         model = LightningPredictor(config)
         model.enable_era5_mode()
         return model
     
     @staticmethod
-    def create_lightweight_model(config: DictConfig) -> LightningPredictor:
+    def create_lightweight_model(config: DictConfig) -> "LightningPredictor":
         """Create lightweight model for inference."""
         # Modify config for lighter model
         light_config = config.copy()
@@ -401,7 +413,7 @@ class LightningPredictorFactory:
         model = LightningPredictor(light_config)
         return model
 
-def create_model_from_config(config: DictConfig, model_type: str = "cape_only") -> LightningPredictor:
+def create_model_from_config(config: DictConfig, model_type: str = "cape_only") -> "LightningPredictor":
     """
     Create model from configuration.
     
@@ -423,7 +435,7 @@ def create_model_from_config(config: DictConfig, model_type: str = "cape_only") 
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
-def load_pretrained_model(checkpoint_path: str, config: DictConfig) -> LightningPredictor:
+def load_pretrained_model(checkpoint_path: str, config: DictConfig) -> "LightningPredictor":
     """
     Load pretrained model from checkpoint.
     
@@ -451,7 +463,7 @@ class ModelSummary:
     """Utility class for model analysis and visualization."""
     
     @staticmethod
-    def print_model_summary(model: LightningPredictor, input_shapes: Dict[str, Tuple]):
+    def print_model_summary(model: "LightningPredictor", input_shapes: Dict[str, Tuple]):
         """Print detailed model summary."""
         print("\n" + "="*80)
         print("LIGHTNING PREDICTION MODEL SUMMARY")
@@ -463,6 +475,7 @@ class ModelSummary:
         print(f"Trainable Parameters: {info['trainable_parameters']:,}")
         print(f"Model Size: {info['model_size_mb']:.2f} MB")
         print(f"CAPE-only Mode: {info['cape_only_mode']}")
+        print(f"Two-Stage Model: {info['two_stage_model_enabled']}")
         print(f"Domain Adaptation: {info['domain_adaptation_enabled']}")
         
         print("\nCOMPONENT ARCHITECTURE:")
@@ -486,11 +499,13 @@ class ModelSummary:
             
             output = model(**dummy_inputs)
             print(f"Lightning Prediction Output: {output['lightning_prediction'].shape}")
-        
+            if 'convection_prediction' in output:
+                print(f"Convection Prediction Output: {output['convection_prediction'].shape}")
+
         print("="*80)
     
     @staticmethod
-    def analyze_memory_usage(model: LightningPredictor, input_shapes: Dict[str, Tuple]) -> Dict:
+    def analyze_memory_usage(model: "LightningPredictor", input_shapes: Dict[str, Tuple]) -> Dict:
         """Analyze model memory usage."""
         import torch.profiler
         
@@ -525,6 +540,11 @@ if __name__ == "__main__":
     from omegaconf import OmegaConf
     
     config = OmegaConf.create({
+        'data': { # Add dummy data config for testing
+            'domain': {
+                'grid_size_3km': (256, 256)
+            }
+        },
         'model': {
             'encoders': {
                 'cape': {
@@ -573,6 +593,12 @@ if __name__ == "__main__":
                 'hidden_dim': 128,
                 'output_dim': 1,
                 'activation': 'sigmoid'
+            },
+            # --- NEW: Add config for the convection head ---
+            'convection_head': {
+                'hidden_dim': 64,
+                'output_dim': 1,
+                'dropout': 0.1
             },
             'domain_adapter': {
                 'terrain_adaptation_dim': 64,

@@ -1,6 +1,8 @@
 """
 PyTorch Dataset classes for lightning prediction.
 FIXED VERSION: Removed default shape parameters to force explicit configuration.
+UPDATED: Added support for a two-stage prediction model by generating a 
+         convective environment mask based on a CAPE threshold.
 """
 
 import torch
@@ -38,7 +40,9 @@ class LightningDataset(Dataset):
                 cape_threshold: float = 100.0,
                 neighborhood_radius: int = 1,
                 background_sample_ratio: float = 0.05,
-                spatial_filtering: bool = True):
+                spatial_filtering: bool = True,
+                # NEW: Parameter for Stage A convective environment target
+                convective_cape_threshold: float = 100.0):
         """
         Initialize Lightning Dataset.
         
@@ -57,6 +61,7 @@ class LightningDataset(Dataset):
             neighborhood_radius: Radius for spatial CAPE analysis
             background_sample_ratio: Ratio of background samples to keep
             spatial_filtering: Whether to enable spatial CAPE filtering
+            convective_cape_threshold: CAPE threshold in J/kg to define the "convective environment" for Stage A.
         """
         # VALIDATION FIX: Validate that all required shape parameters are provided
         if target_cape_shape is None or target_lightning_shape is None or target_terrain_shape is None:
@@ -98,6 +103,10 @@ class LightningDataset(Dataset):
         self.neighborhood_radius = neighborhood_radius
         self.background_sample_ratio = background_sample_ratio
         self.spatial_filtering = spatial_filtering
+        
+        # NEW: Store the convective threshold
+        self.convective_cape_threshold = convective_cape_threshold
+        logger.info(f"  Convective environment threshold (Stage A target): {self.convective_cape_threshold} J/kg")
         
         # Cache for terrain data (static across all samples)
         self._terrain_cache = None
@@ -298,12 +307,27 @@ class LightningDataset(Dataset):
             cape_tensor = cape_tensor.squeeze(0)  # (1, lat, lon)
             lightning_tensor = lightning_tensor.squeeze(0)  # (lat, lon)
         
+        # --- NEW: Create the convective environment mask for Stage A ---
+        # The mask will have the same spatial dimensions as the lightning data.
+        # We need to upsample the CAPE data to match the lightning grid before creating the mask.
+        cape_upsampled = torch.nn.functional.interpolate(
+            cape_tensor.unsqueeze(0),  # Add batch dimension for interpolate
+            size=self.target_lightning_shape,
+            mode='bilinear',
+            align_corners=False
+        ).squeeze(0) # Remove batch dimension
+
+        convective_mask = (cape_upsampled > self.convective_cape_threshold).float()
+        # ----------------------------------------------------------------
+
         # Apply augmentations
         if self.spatial_augmentation is not None:
-            cape_tensor, lightning_tensor, terrain_tensor = self.spatial_augmentation(
-                cape_tensor, lightning_tensor, terrain_tensor
+            # We need to augment the new convective mask as well
+            augmented_tensors = self.spatial_augmentation(
+                cape_tensor, lightning_tensor, terrain_tensor, convective_mask
             )
-        
+            cape_tensor, lightning_tensor, terrain_tensor, convective_mask = augmented_tensors
+
         if self.meteorological_augmentation is not None:
             cape_tensor = self.meteorological_augmentation(cape_tensor)
         
@@ -311,6 +335,7 @@ class LightningDataset(Dataset):
             'cape': cape_tensor,
             'terrain': terrain_tensor,
             'lightning': lightning_tensor,
+            'convective_mask': convective_mask, # NEW: Add the mask to the output
             'file_idx': sample_info['file_idx'],
             'time_start': sample_info['time_start']
         }

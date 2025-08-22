@@ -1,5 +1,7 @@
 """
 Prediction head for lightning occurrence/probability prediction.
+UPDATED: Added a new ConvectionHead class for the Stage A prediction of the
+         two-stage model.
 """
 
 import torch
@@ -370,3 +372,59 @@ class EnsemblePredictionHead(nn.Module):
         uncertainty = torch.sqrt(pred_variance + 1e-6)
         
         return ensemble_pred_logits, uncertainty
+
+# --- NEW: Head for Stage A (Convective Environment Prediction) ---
+class ConvectionHead(nn.Module):
+    """
+    A simplified prediction head for predicting the convective environment (Stage A).
+    Outputs raw logits.
+    """
+    
+    def __init__(self,
+                 input_channels: int,
+                 hidden_dim: int,
+                 output_dim: int,
+                 dropout: float):
+        """
+        Initialize the ConvectionHead.
+        
+        Args:
+            input_channels: Number of input feature channels from the model's backbone.
+            hidden_dim: Hidden dimension for the intermediate layer.
+            output_dim: Output dimension (1 for binary convection prediction).
+            dropout: Dropout probability.
+        """
+        super().__init__()
+        
+        self.predictor = nn.Sequential(
+            nn.Conv2d(input_channels, hidden_dim, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Dropout2d(dropout),
+            nn.Conv2d(hidden_dim, output_dim, kernel_size=1)
+        )
+        
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        """Initialize weights for the layers."""
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass to predict convective environment logits.
+        
+        Args:
+            x: Input features (batch_size, input_channels, height, width).
+            
+        Returns:
+            Raw convection logits (batch_size, output_dim, height, width).
+        """
+        return self.predictor(x)

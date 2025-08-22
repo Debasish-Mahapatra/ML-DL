@@ -1,83 +1,85 @@
 # Training Configuration
 training:
   # Experiment
-  experiment_name: "cape_enhanced_physics_v1"
+  experiment_name: "cape_auto_balance_v1"
   project_name: "lightning_prediction"
   
   # Training Parameters
   max_epochs: 100
   patience: 25
   min_delta: 1e-4
-  save_top_k: 3
   
   # Debug Configuration - NEW SECTION
   debug:
-    enabled: true                    # Master debug switch
+    enabled: false                    # Master debug switch
     verbose_logging: false            # Detailed logging and prediction analysis
     physics_debug: false              # Physics constraint debugging
     cape_analysis: false              # CAPE data distribution analysis
     memory_tracking: false           # Memory usage tracking (can be heavy)
-    metrics_debug: true             # Detailed metrics debugging
-    batch_info: true                 # Batch-level information
+    metrics_debug: false             # Detailed metrics debugging
+    batch_info: false                 # Batch-level information
     save_debug_outputs: false        # Save debug files to disk
   
   # Optimizer
   optimizer:
     type: "AdamW"
-    lr: 5e-4  # INCREASED from 1e-5 to force more exploration
-    weight_decay: 1e-4
+    lr: 1e-5
+    weight_decay: 1e-5
     
   # Scheduler
-  #scheduler:
-  #  type: "CosineAnnealingWarmRestarts"
-  #  T_0: 20
-  #  T_mult: 2
-  #  eta_min: 5e-7  # Change from 1e-6
-    
   scheduler:
-    type: "ReduceLROnPlateau"
-    factor: 0.5
-    patience: 5
-    threshold: 1e-4
-
-  # Loss Configuration - REBALANCED to fix class imbalance issues
+    type: "CosineAnnealingWarmRestarts"
+    T_0: 20
+    T_mult: 2
+    eta_min: 5e-7
+    
+  # Loss Configuration
   loss:
     type: "composite"
     primary: "focal"
     
-    # Main physics weight (overall scaling) - REDUCED to let model learn basic task first
-    physics_weight: 0.0  # REDUCED from 0.15 to 0.01 - less physics dominance initially
+    # --- NEW: Automatic Loss Balancing Control ---
+    # Set to true to enable uncertainty-based automatic loss balancing.
+    # The model will learn to balance the convection and lightning losses itself.
+    automatic_balancing: true
+
+    # This weight is ONLY used if automatic_balancing is set to false.
+    # Total Loss = (1 - weight) * LightningLoss + weight * ConvectionLoss
+    convection_loss_weight: 0.3
+    
+    # Main physics weight (overall scaling)
+    physics_weight: 0.01
     
     # Individual physics constraint weights
-    charge_separation_weight: 0.0  # Keep same - main CAPE physics
-    microphysics_weight: 0.0       # Keep same - will be zero without temperature data
-    terrain_consistency_weight: 0.0  # Keep same - terrain effects
+    charge_separation_weight: 0.03
+    microphysics_weight: 0.01
+    terrain_consistency_weight: 0.01
     
     # NEW: Additional CAPE-specific physics weights
-    cape_gradient_weight: 0.0      # Keep same - CAPE gradient/convergence zone physics
-    cape_temporal_weight: 0.0      # Keep same - temporal CAPE consistency (future use)
+    cape_gradient_weight: 0.03
+    cape_temporal_weight: 0.02
     
-    # Focal loss parameters - REBALANCED for class imbalance
-    focal_alpha: 0.99               # INCREASED from 0.75 to 0.9 - heavily favor lightning class
-    focal_gamma: 3.0                # Keep same
-    label_smoothing: 0.0            # Keep same
+    # Focal loss parameters
+    focal_alpha: 0.8
+    focal_gamma: 2.0
+    label_smoothing: 0.0
     
     # Adaptive learning settings
-    adaptive_weights: true          # Keep same - adaptive tuning enabled
-    adaptive_weighting: true        # Keep same - adaptive main/physics balance
+    adaptive_weights: true
+    adaptive_weighting: true
     
   # Hardware
   accelerator: "gpu"
   devices: 1
-  precision: 32  # Keep same - maintain precision 32
+  precision: 32
   
   # Memory Optimization
-  gradient_accumulation_steps: 1  # from 4 to 2, reduced
+  gradient_accumulation_steps: 2
   max_grad_norm: 1.0
   
   # Reproducibility
   seed: 42
-  deterministic: false  # Keep same - disabled to avoid CUDA issues
+  deterministic: false
   
   # Logging
   log_every_n_steps: 50
@@ -93,23 +95,20 @@ training:
   domain_adaptation:
     enabled: true
     adaptation_layers: ["terrain", "meteorological"]
-    warmup_epochs: 10  # Added explicit warmup setting
+    warmup_epochs: 10
   
   # CAPE Physics Configuration - NEW SECTION
-  #cape_physics:
-    # Multi-threshold CAPE settings
-  #  thresholds:
-  #    no_lightning: 1000.0      # Below this: strongly discourage lightning
-  #    moderate: 2500.0          # 1000-2500: moderate lightning probability
-  #    high: 4000.0              # 2500-4000: high lightning probability
-  #    saturation: 5000.0        # Above this: potential saturation effects
+  cape_physics:
+    thresholds:
+      no_lightning: 1000.0
+      moderate: 2500.0
+      high: 4000.0
+      saturation: 5000.0
     
-    # Saturation physics
-  #  saturation:
-  #    optimal_cape: 3500.0      # Optimal CAPE for lightning formation
-  #    saturation_factor: 0.1    # Reduction factor for extreme CAPE values
+    saturation:
+      optimal_cape: 3500.0
+      saturation_factor: 0.1
     
-  #  # Gradient physics
-  #  gradient:
-  #    convergence_threshold: 500.0  # CAPE gradient threshold for convergence zones
-  #    enhancement_factor: 1.5       # Lightning enhancement in convergence zones
+    gradient:
+      convergence_threshold: 500.0
+      enhancement_factor: 1.5

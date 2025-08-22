@@ -33,7 +33,12 @@ class LightningDataset(Dataset):
                 temporal_stride: int = 1,
                 spatial_augmentation: Optional[callable] = None,
                 meteorological_augmentation: Optional[callable] = None,
-                cache_terrain: bool = True):
+                cache_terrain: bool = True,
+                # CAPE FILTERING PARAMETERS
+                cape_threshold: float = 100.0,
+                neighborhood_radius: int = 1,
+                background_sample_ratio: float = 0.05,
+                spatial_filtering: bool = True):
         """
         Initialize Lightning Dataset.
         
@@ -48,6 +53,10 @@ class LightningDataset(Dataset):
             target_cape_shape: Target shape for CAPE data (lat, lon) at 25km resolution - REQUIRED
             target_lightning_shape: Target shape for lightning data (lat, lon) at 3km resolution - REQUIRED
             target_terrain_shape: Target shape for terrain data (lat, lon) at 1km resolution - REQUIRED
+            cape_threshold: CAPE threshold in J/kg for filtering samples
+            neighborhood_radius: Radius for spatial CAPE analysis
+            background_sample_ratio: Ratio of background samples to keep
+            spatial_filtering: Whether to enable spatial CAPE filtering
         """
         # VALIDATION FIX: Validate that all required shape parameters are provided
         if target_cape_shape is None or target_lightning_shape is None or target_terrain_shape is None:
@@ -83,6 +92,12 @@ class LightningDataset(Dataset):
         self.target_cape_shape = target_cape_shape
         self.target_lightning_shape = target_lightning_shape
         self.target_terrain_shape = target_terrain_shape
+        
+        # CAPE FILTERING PARAMETERS
+        self.cape_threshold = cape_threshold
+        self.neighborhood_radius = neighborhood_radius
+        self.background_sample_ratio = background_sample_ratio
+        self.spatial_filtering = spatial_filtering
         
         # Cache for terrain data (static across all samples)
         self._terrain_cache = None
@@ -144,8 +159,8 @@ class LightningDataset(Dataset):
                         'mean_cape': mean_cape
                     }
                     
-                    # CAPE-based filtering (keep high CAPE samples)
-                    if mean_cape >= 100.0:  # High CAPE threshold
+                    # CAPE-based filtering (use configurable threshold)
+                    if mean_cape >= self.cape_threshold:  # Use instance variable instead of hardcoded 100.0
                         self.sample_index.append(sample)
                     else:
                         background_samples.append(sample)
@@ -157,14 +172,14 @@ class LightningDataset(Dataset):
                 logger.warning(f"Error processing file pair {file_idx}: {e}")
                 continue
         
-        # Add 5% of background samples randomly
-        background_keep = int(len(background_samples) * 0.05)
+        # Add configurable percentage of background samples randomly
+        background_keep = int(len(background_samples) * self.background_sample_ratio)  # Use instance variable instead of hardcoded 0.05
         if background_keep > 0:
             random.shuffle(background_samples)
             self.sample_index.extend(background_samples[:background_keep])
         
         logger.info(f"CAPE filtering results:")
-        logger.info(f"  High CAPE samples (≥100 J/kg): {len(self.sample_index) - background_keep}")
+        logger.info(f"  High CAPE samples (≥{self.cape_threshold} J/kg): {len(self.sample_index) - background_keep}")
         logger.info(f"  Background samples kept: {background_keep}")
         logger.info(f"  Total samples: {len(self.sample_index)}")
         logger.info(f"  Filtering removed: {len(background_samples) - background_keep:,} low-CAPE samples")

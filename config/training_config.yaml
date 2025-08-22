@@ -8,51 +8,58 @@ training:
   max_epochs: 100
   patience: 25
   min_delta: 1e-4
+  save_top_k: 3
   
   # Debug Configuration - NEW SECTION
   debug:
-    enabled: false                    # Master debug switch
+    enabled: true                    # Master debug switch
     verbose_logging: false            # Detailed logging and prediction analysis
     physics_debug: false              # Physics constraint debugging
     cape_analysis: false              # CAPE data distribution analysis
     memory_tracking: false           # Memory usage tracking (can be heavy)
-    metrics_debug: false             # Detailed metrics debugging
-    batch_info: false                 # Batch-level information
+    metrics_debug: true             # Detailed metrics debugging
+    batch_info: true                 # Batch-level information
     save_debug_outputs: false        # Save debug files to disk
   
   # Optimizer
   optimizer:
     type: "AdamW"
-    lr: 1e-5  # INCREASED from 1e-5 to force more exploration
-    weight_decay: 1e-5
+    lr: 5e-4  # INCREASED from 1e-5 to force more exploration
+    weight_decay: 1e-4
     
   # Scheduler
-  scheduler:
-    type: "CosineAnnealingWarmRestarts"
-    T_0: 20
-    T_mult: 2
-    eta_min: 5e-7  # Change from 1e-6
+  #scheduler:
+  #  type: "CosineAnnealingWarmRestarts"
+  #  T_0: 20
+  #  T_mult: 2
+  #  eta_min: 5e-7  # Change from 1e-6
     
+  scheduler:
+    type: "ReduceLROnPlateau"
+    factor: 0.5
+    patience: 5
+    threshold: 1e-4
+
   # Loss Configuration - REBALANCED to fix class imbalance issues
   loss:
     type: "composite"
     primary: "focal"
     
     # Main physics weight (overall scaling) - REDUCED to let model learn basic task first
-    physics_weight: 0.01  # REDUCED from 0.15 to 0.01 - less physics dominance initially
+    physics_weight: 0.0  # REDUCED from 0.15 to 0.01 - less physics dominance initially
     
     # Individual physics constraint weights
-    charge_separation_weight: 0.03  # Keep same - main CAPE physics
-    microphysics_weight: 0.01       # Keep same - will be zero without temperature data
-    terrain_consistency_weight: 0.01  # Keep same - terrain effects
+    charge_separation_weight: 0.0  # Keep same - main CAPE physics
+    microphysics_weight: 0.0       # Keep same - will be zero without temperature data
+    terrain_consistency_weight: 0.0  # Keep same - terrain effects
     
     # NEW: Additional CAPE-specific physics weights
-    cape_gradient_weight: 0.03      # Keep same - CAPE gradient/convergence zone physics
-    cape_temporal_weight: 0.02      # Keep same - temporal CAPE consistency (future use)
+    cape_gradient_weight: 0.0      # Keep same - CAPE gradient/convergence zone physics
+    cape_temporal_weight: 0.0      # Keep same - temporal CAPE consistency (future use)
     
     # Focal loss parameters - REBALANCED for class imbalance
-    focal_alpha: 0.8               # INCREASED from 0.75 to 0.9 - heavily favor lightning class
-    focal_gamma: 2.0                # Keep same
+    focal_alpha: 0.99               # INCREASED from 0.75 to 0.9 - heavily favor lightning class
+    focal_gamma: 3.0                # Keep same
     label_smoothing: 0.0            # Keep same
     
     # Adaptive learning settings
@@ -65,7 +72,7 @@ training:
   precision: 32  # Keep same - maintain precision 32
   
   # Memory Optimization
-  gradient_accumulation_steps: 2  # from 4 to 2, reduced
+  gradient_accumulation_steps: 1  # from 4 to 2, reduced
   max_grad_norm: 1.0
   
   # Reproducibility
@@ -89,20 +96,20 @@ training:
     warmup_epochs: 10  # Added explicit warmup setting
   
   # CAPE Physics Configuration - NEW SECTION
-  cape_physics:
+  #cape_physics:
     # Multi-threshold CAPE settings
-    thresholds:
-      no_lightning: 1000.0      # Below this: strongly discourage lightning
-      moderate: 2500.0          # 1000-2500: moderate lightning probability
-      high: 4000.0              # 2500-4000: high lightning probability
-      saturation: 5000.0        # Above this: potential saturation effects
+  #  thresholds:
+  #    no_lightning: 1000.0      # Below this: strongly discourage lightning
+  #    moderate: 2500.0          # 1000-2500: moderate lightning probability
+  #    high: 4000.0              # 2500-4000: high lightning probability
+  #    saturation: 5000.0        # Above this: potential saturation effects
     
     # Saturation physics
-    saturation:
-      optimal_cape: 3500.0      # Optimal CAPE for lightning formation
-      saturation_factor: 0.1    # Reduction factor for extreme CAPE values
+  #  saturation:
+  #    optimal_cape: 3500.0      # Optimal CAPE for lightning formation
+  #    saturation_factor: 0.1    # Reduction factor for extreme CAPE values
     
-    # Gradient physics
-    gradient:
-      convergence_threshold: 500.0  # CAPE gradient threshold for convergence zones
-      enhancement_factor: 1.5       # Lightning enhancement in convergence zones
+  #  # Gradient physics
+  #  gradient:
+  #    convergence_threshold: 500.0  # CAPE gradient threshold for convergence zones
+  #    enhancement_factor: 1.5       # Lightning enhancement in convergence zones

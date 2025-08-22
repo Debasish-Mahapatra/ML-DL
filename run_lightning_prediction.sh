@@ -24,9 +24,9 @@ LOGS_DIR="logs"
 # Training configuration
 EXPERIMENT_NAME="lightning_cape_seasonal_$(date +%Y%m%d_%H%M%S)"
 TRAINING_YEARS="2019 2020 2021"
-#CONFIG_DIR="config"
+CONFIG_DIR="config"
 
-CONFIG_DIR="config/simplified"      #Simplyfied config for testing and debugging 
+#CONFIG_DIR="config/simplified"      #Simplyfied config for testing and debugging 
 
 # Domain bounds for Odisha
 DOMAIN_BOUNDS="81.1644 87.52883 17.76351 22.62838"
